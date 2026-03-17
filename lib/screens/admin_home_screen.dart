@@ -9,6 +9,7 @@ import '../models/puja_call_models.dart';
 import '../services/api_config.dart';
 import '../services/admin_booking_service.dart';
 import '../services/admin_chat_service.dart';
+import '../services/app_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/chat_push_service.dart';
 import '../services/puja_call_service.dart';
@@ -27,14 +28,37 @@ class AdminHomeScreen extends StatefulWidget {
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int _currentIndex = 0;
+  bool _isHindi = AppPreferences.isHindiNotifier.value;
+
+  @override
+  void initState() {
+    super.initState();
+    AppPreferences.isHindiNotifier.addListener(_onLanguageChanged);
+  }
+
+  @override
+  void dispose() {
+    AppPreferences.isHindiNotifier.removeListener(_onLanguageChanged);
+    super.dispose();
+  }
+
+  void _onLanguageChanged() {
+    if (!mounted) return;
+    setState(() {
+      _isHindi = AppPreferences.isHindiNotifier.value;
+    });
+  }
+
+  String _tr(String en, String hi) => _isHindi ? hi : en;
 
   @override
   Widget build(BuildContext context) {
+    final bool dark = Theme.of(context).brightness == Brightness.dark;
     final List<String> titles = <String>[
-      'All Chat',
-      'Booked Puja',
-      'Booked Remedies',
-      'Setting',
+      _tr('All Chat', 'सभी चैट'),
+      _tr('Booked Puja', 'बुक्ड पूजा'),
+      _tr('Booked Remedies', 'बुक्ड रेमेडीज'),
+      _tr('Setting', 'सेटिंग'),
     ];
 
     return Scaffold(
@@ -53,7 +77,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             ),
             const SizedBox(height: 2),
             Text(
-              'AstroAdmin workspace',
+              _tr('AstroAdmin workspace', 'एस्ट्रोएडमिन वर्कस्पेस'),
               style: TextStyle(
                 fontSize: 12.5,
                 color: AdminAppTheme.muted.withValues(alpha: 0.88),
@@ -63,7 +87,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         ),
       ),
       body: Container(
-        decoration: AdminAppTheme.pageBackdrop(),
+        decoration: AdminAppTheme.pageBackdrop(isDark: dark),
         child: _buildCurrentPage(),
       ),
       bottomNavigationBar: Padding(
@@ -75,26 +99,26 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             onDestinationSelected: (int index) {
               setState(() => _currentIndex = index);
             },
-            destinations: const <NavigationDestination>[
+            destinations: <NavigationDestination>[
               NavigationDestination(
-                icon: Icon(Icons.chat_bubble_outline_rounded),
-                selectedIcon: Icon(Icons.chat_bubble_rounded),
-                label: 'All Chat',
+                icon: const Icon(Icons.chat_bubble_outline_rounded),
+                selectedIcon: const Icon(Icons.chat_bubble_rounded),
+                label: _tr('All Chat', 'सभी चैट'),
               ),
               NavigationDestination(
-                icon: Icon(Icons.temple_buddhist_outlined),
-                selectedIcon: Icon(Icons.temple_buddhist_rounded),
-                label: 'Booked Puja',
+                icon: const Icon(Icons.temple_buddhist_outlined),
+                selectedIcon: const Icon(Icons.temple_buddhist_rounded),
+                label: _tr('Booked Puja', 'बुक्ड पूजा'),
               ),
               NavigationDestination(
-                icon: Icon(Icons.auto_awesome_outlined),
-                selectedIcon: Icon(Icons.auto_awesome_rounded),
-                label: 'Booked Remedies',
+                icon: const Icon(Icons.auto_awesome_outlined),
+                selectedIcon: const Icon(Icons.auto_awesome_rounded),
+                label: _tr('Booked Remedies', 'बुक्ड रेमेडीज'),
               ),
               NavigationDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings_rounded),
-                label: 'Setting',
+                icon: const Icon(Icons.settings_outlined),
+                selectedIcon: const Icon(Icons.settings_rounded),
+                label: _tr('Setting', 'सेटिंग'),
               ),
             ],
           ),
@@ -112,7 +136,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       case 2:
         return const _BookedRemediesTab();
       default:
-        return const _AdminSettingsTab();
+        return _AdminSettingsTab(isHindi: _isHindi);
     }
   }
 }
@@ -181,7 +205,8 @@ class _AllChatsTabState extends State<_AllChatsTab> {
                 _StateMessage(
                   icon: Icons.mark_chat_unread_outlined,
                   title: 'No chats yet',
-                  subtitle: 'User conversations will appear here automatically.',
+                  subtitle:
+                      'User conversations will appear here automatically.',
                 ),
               ],
             ),
@@ -470,7 +495,8 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text('Failed to start ${isVideo ? "video" : "audio"} call: $e'),
+            content:
+                Text('Failed to start ${isVideo ? "video" : "audio"} call: $e'),
           ),
         );
     } finally {
@@ -519,7 +545,8 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
         ),
         actions: <Widget>[
           IconButton(
-            onPressed: _startingAudioCall ? null : () => _startSupportCall('audio'),
+            onPressed:
+                _startingAudioCall ? null : () => _startSupportCall('audio'),
             icon: _startingAudioCall
                 ? const SizedBox(
                     width: 18,
@@ -529,7 +556,8 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
                 : const Icon(Icons.call_rounded),
           ),
           IconButton(
-            onPressed: _startingVideoCall ? null : () => _startSupportCall('video'),
+            onPressed:
+                _startingVideoCall ? null : () => _startSupportCall('video'),
             icon: _startingVideoCall
                 ? const SizedBox(
                     width: 18,
@@ -542,7 +570,9 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
         ],
       ),
       body: Container(
-        decoration: AdminAppTheme.pageBackdrop(),
+        decoration: AdminAppTheme.pageBackdrop(
+          isDark: Theme.of(context).brightness == Brightness.dark,
+        ),
         child: Column(
           children: <Widget>[
             Expanded(
@@ -559,7 +589,8 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
                     return _StateMessage(
                       icon: Icons.error_outline_rounded,
                       title: 'Unable to load messages',
-                      subtitle: 'Please try again. If it persists, check chat configuration.',
+                      subtitle:
+                          'Please try again. If it persists, check chat configuration.',
                     );
                   }
                   final List<AdminMessage> messages =
@@ -931,7 +962,9 @@ class _BookedRemediesTabState extends State<_BookedRemediesTab> {
 }
 
 class _AdminSettingsTab extends StatefulWidget {
-  const _AdminSettingsTab();
+  final bool isHindi;
+
+  const _AdminSettingsTab({required this.isHindi});
 
   @override
   State<_AdminSettingsTab> createState() => _AdminSettingsTabState();
@@ -940,12 +973,18 @@ class _AdminSettingsTab extends StatefulWidget {
 class _AdminSettingsTabState extends State<_AdminSettingsTab> {
   final AuthService _authService = AuthService();
   late Future<Map<String, String>> _profileFuture;
+  bool _isHindi = false;
+  bool _isDark = false;
 
   @override
   void initState() {
     super.initState();
+    _isHindi = widget.isHindi;
+    _isDark = AppPreferences.themeModeNotifier.value == ThemeMode.dark;
     _profileFuture = _authService.readStoredProfile();
   }
+
+  String _tr(String en, String hi) => _isHindi ? hi : en;
 
   Future<void> _refreshProfile() async {
     setState(() => _profileFuture = _authService.readStoredProfile());
@@ -954,8 +993,9 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Admin profile refreshed'),
+      SnackBar(
+        content: Text(
+            _tr('Admin profile refreshed', 'एडमिन प्रोफ़ाइल रीफ्रेश हो गई')),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -970,8 +1010,14 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
       SnackBar(
         content: Text(
           hasAccess
-              ? 'Admin access is active for this account'
-              : 'Admin access is missing for this account',
+              ? _tr(
+                  'Admin access is active for this account',
+                  'इस अकाउंट के लिए एडमिन एक्सेस सक्रिय है',
+                )
+              : _tr(
+                  'Admin access is missing for this account',
+                  'इस अकाउंट में एडमिन एक्सेस उपलब्ध नहीं है',
+                ),
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -988,7 +1034,10 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Support mobile ${ApiConfig.adminSupportMobileNo} copied',
+          _tr(
+            'Support mobile ${ApiConfig.adminSupportMobileNo} copied',
+            'सपोर्ट मोबाइल ${ApiConfig.adminSupportMobileNo} कॉपी हो गया',
+          ),
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -1028,16 +1077,19 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'Access & Security',
+              Text(
+                _tr('Access & Security', 'एक्सेस और सुरक्षा'),
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
-                'Use this panel only with approved admin numbers. Logout immediately after review work on shared devices.',
+              Text(
+                _tr(
+                  'Use this panel only with approved admin numbers. Logout immediately after review work on shared devices.',
+                  'इस पैनल का उपयोग केवल स्वीकृत एडमिन नंबर से करें। साझा डिवाइस पर काम खत्म होने पर तुरंत लॉगआउट करें।',
+                ),
                 style: TextStyle(
                   fontSize: 14,
                   color: AdminAppTheme.muted,
@@ -1045,23 +1097,48 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                 ),
               ),
               const SizedBox(height: 18),
-              const _GuidePoint(
+              _GuidePoint(
                 icon: Icons.verified_user_rounded,
-                text: 'OTP access is limited to approved admin accounts.',
+                text: _tr(
+                  'OTP access is limited to approved admin accounts.',
+                  'OTP एक्सेस केवल स्वीकृत एडमिन अकाउंट तक सीमित है।',
+                ),
               ),
-              const _GuidePoint(
+              _GuidePoint(
                 icon: Icons.support_agent_rounded,
-                text: 'Support mobile is available for urgent access checks.',
+                text: _tr(
+                  'Support mobile is available for urgent access checks.',
+                  'तत्काल एक्सेस जांच के लिए सपोर्ट मोबाइल उपलब्ध है।',
+                ),
               ),
-              const _GuidePoint(
+              _GuidePoint(
                 icon: Icons.logout_rounded,
-                text: 'Sign out after completing booking or chat reviews.',
+                text: _tr(
+                  'Sign out after completing booking or chat reviews.',
+                  'बुकिंग या चैट समीक्षा पूरी होने पर साइन आउट करें।',
+                ),
               ),
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _toggleLanguage(bool value) async {
+    await AppPreferences.setHindi(value);
+    if (!mounted) return;
+    setState(() {
+      _isHindi = value;
+    });
+  }
+
+  Future<void> _toggleTheme(bool value) async {
+    await AppPreferences.setDarkMode(value);
+    if (!mounted) return;
+    setState(() {
+      _isDark = value;
+    });
   }
 
   Future<void> _logout() async {
@@ -1075,6 +1152,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final bool dark = Theme.of(context).brightness == Brightness.dark;
     return FutureBuilder<Map<String, String>>(
       future: _profileFuture,
       builder: (
@@ -1088,6 +1166,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: AdminAppTheme.glassCard(
+                isDark: dark,
                 colors: <Color>[
                   Colors.white,
                   AdminAppTheme.gold.withValues(alpha: 0.18),
@@ -1096,8 +1175,8 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text(
-                    'Admin Profile',
+                  Text(
+                    _tr('Admin Profile', 'एडमिन प्रोफ़ाइल'),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
@@ -1105,21 +1184,23 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                   ),
                   const SizedBox(height: 14),
                   _SettingsRow(
-                      label: 'Name', value: profile['name'] ?? 'Admin'),
+                    label: _tr('Name', 'नाम'),
+                    value: profile['name'] ?? _tr('Admin', 'एडमिन'),
+                  ),
                   _SettingsRow(
-                    label: 'Mobile',
+                    label: _tr('Mobile', 'मोबाइल'),
                     value: profile['mobileNo']?.isNotEmpty == true
                         ? profile['mobileNo']!
                         : '-',
                   ),
                   _SettingsRow(
-                    label: 'Email',
+                    label: _tr('Email', 'ईमेल'),
                     value: profile['email']?.isNotEmpty == true
                         ? profile['email']!
                         : '-',
                   ),
                   _SettingsRow(
-                    label: 'Role',
+                    label: _tr('Role', 'रोल'),
                     value: profile['role']?.isNotEmpty == true
                         ? profile['role']!
                         : 'ADMIN',
@@ -1130,42 +1211,77 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: AdminAppTheme.glassCard(),
+              decoration: AdminAppTheme.glassCard(isDark: dark),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text(
-                    'Quick Actions',
+                  Text(
+                    _tr('Quick Actions', 'त्वरित क्रियाएँ'),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 14),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _isHindi,
+                    secondary: const Icon(Icons.language_rounded),
+                    title: Text(_tr('Hindi Language', 'हिंदी भाषा')),
+                    subtitle: Text(
+                      _tr('Toggle Hindi / English labels',
+                          'हिंदी / अंग्रेज़ी लेबल बदलें'),
+                    ),
+                    onChanged: _toggleLanguage,
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _isDark,
+                    secondary: const Icon(Icons.dark_mode_rounded),
+                    title: Text(_tr('Dark Theme', 'डार्क थीम')),
+                    subtitle: Text(
+                      _tr('Enable premium dark appearance',
+                          'प्रीमियम डार्क रूप सक्षम करें'),
+                    ),
+                    onChanged: _toggleTheme,
+                  ),
+                  const Divider(height: 1),
                   _SettingsActionTile(
                     icon: Icons.refresh_rounded,
-                    title: 'Refresh Profile',
-                    subtitle: 'Reload saved admin details from the device.',
+                    title: _tr('Refresh Profile', 'प्रोफ़ाइल रीफ्रेश करें'),
+                    subtitle: _tr(
+                      'Reload saved admin details from the device.',
+                      'डिवाइस से सेव एडमिन जानकारी पुनः लोड करें।',
+                    ),
                     onTap: _refreshProfile,
                   ),
                   _SettingsActionTile(
                     icon: Icons.verified_user_outlined,
-                    title: 'Check Admin Access',
-                    subtitle:
-                        'Confirm that the current account is still valid.',
+                    title: _tr('Check Admin Access', 'एडमिन एक्सेस जांचें'),
+                    subtitle: _tr(
+                      'Confirm that the current account is still valid.',
+                      'पुष्टि करें कि वर्तमान अकाउंट अभी भी मान्य है।',
+                    ),
                     onTap: _checkAccess,
                   ),
                   _SettingsActionTile(
                     icon: Icons.content_copy_rounded,
-                    title: 'Copy Support Mobile',
-                    subtitle:
-                        'Quickly copy the admin support number for follow-up.',
+                    title:
+                        _tr('Copy Support Mobile', 'सपोर्ट मोबाइल कॉपी करें'),
+                    subtitle: _tr(
+                      'Quickly copy the admin support number for follow-up.',
+                      'फॉलो-अप के लिए एडमिन सपोर्ट नंबर जल्दी कॉपी करें।',
+                    ),
                     onTap: _copySupportNumber,
                   ),
                   _SettingsActionTile(
                     icon: Icons.security_rounded,
-                    title: 'Access & Security',
-                    subtitle: 'View basic usage and session safety guidelines.',
+                    title: _tr('Access & Security', 'एक्सेस और सुरक्षा'),
+                    subtitle: _tr(
+                      'View basic usage and session safety guidelines.',
+                      'बुनियादी उपयोग और सत्र सुरक्षा निर्देश देखें।',
+                    ),
                     onTap: _showAccessGuide,
                     showDivider: false,
                   ),
@@ -1175,20 +1291,23 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: AdminAppTheme.glassCard(),
+              decoration: AdminAppTheme.glassCard(isDark: dark),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text(
-                    'Workspace Summary',
+                  Text(
+                    _tr('Workspace Summary', 'वर्कस्पेस सारांश'),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
-                    'AstroAdmin now owns the dedicated admin flow: OTP login, all chats, booked puja, booked remedies, and admin settings.',
+                  Text(
+                    _tr(
+                      'AstroAdmin now owns the dedicated admin flow: OTP login, all chats, booked puja, booked remedies, and admin settings.',
+                      'AstroAdmin अब समर्पित एडमिन फ्लो संभालता है: OTP लॉगिन, सभी चैट, बुक्ड पूजा, बुक्ड रेमेडीज और सेटिंग।',
+                    ),
                     style: TextStyle(
                       fontSize: 14,
                       color: AdminAppTheme.muted,
@@ -1199,7 +1318,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                   ElevatedButton.icon(
                     onPressed: _logout,
                     icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Logout'),
+                    label: Text(_tr('Logout', 'लॉगआउट')),
                   ),
                 ],
               ),

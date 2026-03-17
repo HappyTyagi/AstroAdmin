@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/admin_chat_model.dart';
+import 'admin_chat_local_db.dart';
 import 'api_client.dart';
 import 'api_config.dart';
 
@@ -22,6 +23,7 @@ class AdminChatService {
   final Map<String, bool> _channelSubscriptions = <String, bool>{};
   final Map<String, Future<void>> _historyLoads = <String, Future<void>>{};
   final Random _random = Random();
+  final AdminChatLocalDb _localDb = AdminChatLocalDb();
 
   RtmClient? _rtmClient;
   String? _rtmUserId;
@@ -39,7 +41,9 @@ class AdminChatService {
   Future<Map<String, dynamic>> _readAuthContext() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final int userId = prefs.getInt('userId') ?? 0;
-    final String role = (prefs.getString('role') ?? 'USER').trim().toUpperCase();
+    final String role = (prefs.getString('role') ?? 'USER')
+        .trim()
+        .toUpperCase();
     final String name = (prefs.getString('name') ?? '').trim();
     final String mobileNo = (prefs.getString('mobileNo') ?? '').trim();
     final String avatar = (prefs.getString('profileImageUrl') ?? '').trim();
@@ -93,6 +97,27 @@ class AdminChatService {
         normalized.contains('logout');
   }
 
+  bool _isRtmServiceUnavailableReason(String reason) {
+    final normalized = reason.toLowerCase();
+    return (normalized.contains('rtm') && normalized.contains('not enable')) ||
+        (normalized.contains('rtm') && normalized.contains('not enabled')) ||
+        normalized.contains('not enaable') ||
+        (normalized.contains('service') &&
+            normalized.contains('has been stop')) ||
+        (normalized.contains('service') && normalized.contains('stopped'));
+  }
+
+  bool _isRtmUnavailableError(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('agora rtm unavailable') ||
+        message.contains('rtm unavailable') ||
+        message.contains('not enaable') ||
+        message.contains('not enable') ||
+        message.contains('not enabled') ||
+        message.contains('has been stop') ||
+        message.contains('stopped');
+  }
+
   Future<void> _resetRtmState() async {
     final RtmClient? client = _rtmClient;
     _rtmClient = null;
@@ -108,15 +133,17 @@ class AdminChatService {
   }
 
   Future<void> _initializeRtmClient(String desiredRtmUserId) async {
-    final Response<dynamic> response =
-        await _client.get(ApiConfig.adminSupportRtmToken);
+    final Response<dynamic> response = await _client.get(
+      ApiConfig.adminSupportRtmToken,
+    );
     final Map<String, dynamic> data = Map<String, dynamic>.from(
       response.data as Map,
     );
     final String appId = (data['appId'] ?? '').toString().trim();
     final String token = (data['token'] ?? '').toString();
-    final String rtmUserId =
-        (data['rtmUserId'] ?? desiredRtmUserId).toString().trim();
+    final String rtmUserId = (data['rtmUserId'] ?? desiredRtmUserId)
+        .toString()
+        .trim();
 
     if (appId.isEmpty) {
       throw Exception(data['message'] ?? 'Agora RTM App ID is missing');
@@ -129,10 +156,7 @@ class AdminChatService {
     final (RtmStatus status, RtmClient client) = await RTM(
       appId,
       rtmUserId,
-      config: const RtmConfig(
-        useStringUserId: true,
-        reconnectTimeout: 10,
-      ),
+      config: const RtmConfig(useStringUserId: true, reconnectTimeout: 10),
     );
     if (status.error) {
       throw Exception('Agora RTM init failed: ${status.reason}');
@@ -160,6 +184,13 @@ class AdminChatService {
 
     final (RtmStatus loginStatus, _) = await _rtmClient!.login(token);
     if (loginStatus.error) {
+      if (_isRtmServiceUnavailableReason(loginStatus.reason)) {
+        await _resetRtmState();
+        debugPrint(
+          '[AdminChat][RTM] login unavailable, switching to limited mode: ${loginStatus.reason}',
+        );
+        return;
+      }
       throw Exception('Agora RTM login failed: ${loginStatus.reason}');
     }
   }
@@ -215,22 +246,91 @@ class AdminChatService {
   }
 
   void _mergeMessage(String chatId, AdminMessage message) {
-    final List<AdminMessage> current = List<AdminMessage>.from(
+    final List<AdminMessage> merged = _mergeUniqueMessages(
       _messageCache[chatId] ?? <AdminMessage>[],
+      <AdminMessage>[message],
     );
-    final int existingIndex = current.indexWhere((AdminMessage item) {
-      return item.id == message.id;
-    });
-    if (existingIndex >= 0) {
-      current[existingIndex] = message;
-    } else {
-      current.add(message);
+    _messageCache[chatId] = merged;
+    _messageControllers[chatId]?.add(List<AdminMessage>.unmodifiable(merged));
+    _persistMessagesLocally(chatId, <AdminMessage>[message]);
+  }
+
+  Future<void> _loadLocalMessages(String chatId) async {
+    try {
+      final List<AdminMessage> localMessages = await _localDb.getMessages(
+        chatId,
+      );
+      if (localMessages.isEmpty) {
+        return;
+      }
+      final List<AdminMessage> merged = _mergeUniqueMessages(
+        _messageCache[chatId] ?? <AdminMessage>[],
+        localMessages,
+      );
+      _messageCache[chatId] = merged;
+      _messageControllers[chatId]?.add(List<AdminMessage>.unmodifiable(merged));
+    } catch (error) {
+      debugPrint('[AdminChat][LocalDB] load failed for $chatId: $error');
     }
-    current.sort((AdminMessage a, AdminMessage b) {
-      return a.timestamp.compareTo(b.timestamp);
+  }
+
+  void _persistMessagesLocally(String chatId, List<AdminMessage> messages) {
+    if (messages.isEmpty) {
+      return;
+    }
+    Future<void>.microtask(() async {
+      try {
+        await _localDb.upsertMessages(chatId, messages);
+      } catch (error) {
+        debugPrint('[AdminChat][LocalDB] persist failed for $chatId: $error');
+      }
     });
-    _messageCache[chatId] = current;
-    _messageControllers[chatId]?.add(List<AdminMessage>.unmodifiable(current));
+  }
+
+  List<AdminMessage> _mergeUniqueMessages(
+    List<AdminMessage> existing,
+    List<AdminMessage> incoming,
+  ) {
+    final Map<String, AdminMessage> byKey = <String, AdminMessage>{};
+
+    void put(AdminMessage message) {
+      final String id = message.id.trim();
+      final String key = id.isNotEmpty ? 'id:$id' : _messageSignature(message);
+      final AdminMessage? previous = byKey[key];
+      if (previous == null) {
+        byKey[key] = message;
+        return;
+      }
+      if (previous.isRead && !message.isRead) {
+        byKey[key] = AdminMessage.fromJson(<String, dynamic>{
+          ...message.toJson(),
+          'isRead': true,
+        });
+      } else {
+        byKey[key] = message;
+      }
+    }
+
+    for (final AdminMessage message in existing) {
+      put(message);
+    }
+    for (final AdminMessage message in incoming) {
+      put(message);
+    }
+
+    final List<AdminMessage> merged = byKey.values.toList();
+    merged.sort((AdminMessage a, AdminMessage b) {
+      final int byTime = a.timestamp.compareTo(b.timestamp);
+      if (byTime != 0) {
+        return byTime;
+      }
+      return a.id.compareTo(b.id);
+    });
+    return merged;
+  }
+
+  String _messageSignature(AdminMessage message) {
+    return '${message.senderRole}|${message.senderId}|${message.messageType}|${message.content.trim()}|${message.timestamp.millisecondsSinceEpoch}';
   }
 
   String _generateMessageId() {
@@ -254,6 +354,9 @@ class AdminChatService {
 
   Future<void> _ensureSubscribed(String chatId) async {
     await _ensureRtmReady();
+    if (_rtmClient == null) {
+      throw Exception('Agora RTM unavailable for chat subscribe');
+    }
     final String channelName = _channelNameForChatId(chatId);
     if (_channelSubscriptions[channelName] == true) {
       return;
@@ -284,23 +387,45 @@ class AdminChatService {
   Future<void> _loadHistory(String chatId) async {
     final String channelName = _channelNameForChatId(chatId);
     _historyLoads[chatId] ??= () async {
-      await _ensureSubscribed(chatId);
-      final (RtmStatus status, result) =
-          await _rtmClient!.getHistory().getMessages(
+      try {
+        await _ensureSubscribed(chatId);
+      } catch (error) {
+        if (_isRtmUnavailableError(error)) {
+          _applyHistory(chatId, <HistoryMessage>[]);
+          return;
+        }
+        rethrow;
+      }
+      if (_rtmClient == null) {
+        _applyHistory(chatId, <HistoryMessage>[]);
+        return;
+      }
+      final (RtmStatus status, result) = await _rtmClient!
+          .getHistory()
+          .getMessages(channelName, RtmChannelType.message, messageCount: 200);
+      if (status.error) {
+        if (_isRecoverableRtmReason(status.reason)) {
+          await _resetRtmState();
+          try {
+            await _ensureSubscribed(chatId);
+          } catch (error) {
+            if (_isRtmUnavailableError(error)) {
+              _applyHistory(chatId, <HistoryMessage>[]);
+              return;
+            }
+            rethrow;
+          }
+          if (_rtmClient == null) {
+            _applyHistory(chatId, <HistoryMessage>[]);
+            return;
+          }
+          final (RtmStatus retryStatus, retryResult) = await _rtmClient!
+              .getHistory()
+              .getMessages(
                 channelName,
                 RtmChannelType.message,
                 messageCount: 200,
               );
-      if (status.error) {
-        if (_isRecoverableRtmReason(status.reason)) {
-          await _resetRtmState();
-          await _ensureSubscribed(chatId);
-          final (RtmStatus retryStatus, retryResult) =
-              await _rtmClient!.getHistory().getMessages(
-                    channelName,
-                    RtmChannelType.message,
-                    messageCount: 200,
-                  );
           if (retryStatus.error) {
             throw Exception(
               'Failed to load chat history: ${retryStatus.reason}',
@@ -322,7 +447,7 @@ class AdminChatService {
   }
 
   void _applyHistory(String chatId, List<HistoryMessage> history) {
-    final List<AdminMessage> messages = history
+    final List<AdminMessage> historyMessages = history
         .map((HistoryMessage entry) {
           final String raw = utf8.decode(
             entry.message ?? Uint8List(0),
@@ -334,12 +459,14 @@ class AdminChatService {
           );
         })
         .where((AdminMessage item) => item.chatId == chatId)
-        .toList()
-      ..sort((AdminMessage a, AdminMessage b) {
-        return a.timestamp.compareTo(b.timestamp);
-      });
-    _messageCache[chatId] = messages;
-    _messageControllers[chatId]?.add(List<AdminMessage>.unmodifiable(messages));
+        .toList();
+    final List<AdminMessage> merged = _mergeUniqueMessages(
+      _messageCache[chatId] ?? <AdminMessage>[],
+      historyMessages,
+    );
+    _messageCache[chatId] = merged;
+    _messageControllers[chatId]?.add(List<AdminMessage>.unmodifiable(merged));
+    _persistMessagesLocally(chatId, merged);
   }
 
   Stream<List<AdminChatSession>> getAllChatsForAdmin() async* {
@@ -351,8 +478,9 @@ class AdminChatService {
   }
 
   Future<List<AdminChatSession>> _fetchAdminChats() async {
-    final Response<dynamic> response =
-        await _client.get(ApiConfig.adminSupportAdminSessions);
+    final Response<dynamic> response = await _client.get(
+      ApiConfig.adminSupportAdminSessions,
+    );
     final Map<String, dynamic> data = Map<String, dynamic>.from(
       response.data as Map,
     );
@@ -360,19 +488,18 @@ class AdminChatService {
         data['sessions'] as List<dynamic>? ?? <dynamic>[];
     return items
         .map(
-          (dynamic item) => AdminChatSession.fromJson(
-            Map<String, dynamic>.from(item as Map),
-          ),
+          (dynamic item) =>
+              AdminChatSession.fromJson(Map<String, dynamic>.from(item as Map)),
         )
         .toList();
   }
 
   Stream<List<AdminMessage>> getMessagesStream(String chatId) {
-    final StreamController<List<AdminMessage>> controller =
-        _messageControllers.putIfAbsent(
-      chatId,
-      () => StreamController<List<AdminMessage>>.broadcast(),
-    );
+    final StreamController<List<AdminMessage>> controller = _messageControllers
+        .putIfAbsent(
+          chatId,
+          () => StreamController<List<AdminMessage>>.broadcast(),
+        );
     if (_messageCache.containsKey(chatId)) {
       scheduleMicrotask(() {
         if (!controller.isClosed) {
@@ -383,9 +510,21 @@ class AdminChatService {
       });
     } else {
       scheduleMicrotask(() async {
+        await _loadLocalMessages(chatId);
         try {
           await _loadHistory(chatId);
         } catch (error) {
+          if (_isRtmUnavailableError(error)) {
+            if (!_messageCache.containsKey(chatId)) {
+              _messageCache[chatId] = <AdminMessage>[];
+            }
+            if (!controller.isClosed && _messageCache.containsKey(chatId)) {
+              controller.add(
+                List<AdminMessage>.unmodifiable(_messageCache[chatId]!),
+              );
+            }
+            return;
+          }
           if (!controller.isClosed) {
             controller.addError(error);
           }
@@ -408,7 +547,19 @@ class AdminChatService {
     int? fileSize,
     int? mediaDuration,
   }) async {
-    await _ensureSubscribed(chatId);
+    var publishViaRtm = true;
+    try {
+      await _ensureSubscribed(chatId);
+    } catch (error) {
+      if (_isRtmUnavailableError(error)) {
+        publishViaRtm = false;
+        debugPrint(
+          '[AdminChat] sendMessage fallback (RTM unavailable): $error',
+        );
+      } else {
+        rethrow;
+      }
+    }
 
     final AdminMessage message = AdminMessage(
       id: _generateMessageId(),
@@ -426,6 +577,12 @@ class AdminChatService {
       timestamp: DateTime.now(),
       isRead: false,
     );
+
+    if (!publishViaRtm || _rtmClient == null) {
+      await _registerMessageActivity(chatId, message);
+      _mergeMessage(chatId, message);
+      return message;
+    }
 
     final String channelName = _channelNameForChatId(chatId);
     for (int attempt = 0; attempt < 2; attempt++) {
@@ -474,10 +631,11 @@ class AdminChatService {
     required String chatId,
     required String content,
     required String senderName,
+    int? senderId,
   }) async {
     await sendMessage(
       chatId: chatId,
-      senderId: adminUserId,
+      senderId: senderId ?? adminUserId,
       senderName: senderName,
       senderRole: 'admin',
       messageType: 'text',
@@ -504,11 +662,13 @@ class AdminChatService {
     }).toList();
     _messageCache[chatId] = updated;
     _messageControllers[chatId]?.add(List<AdminMessage>.unmodifiable(updated));
+    _persistMessagesLocally(chatId, updated);
   }
 
   Future<AdminChatSession> getChatSession(String chatId) async {
-    final Response<dynamic> response =
-        await _client.get('${ApiConfig.adminSupportSessions}/$chatId');
+    final Response<dynamic> response = await _client.get(
+      '${ApiConfig.adminSupportSessions}/$chatId',
+    );
     final Map<String, dynamic> data = Map<String, dynamic>.from(
       response.data as Map,
     );
@@ -560,9 +720,7 @@ class AdminChatService {
       '${ApiConfig.adminSupportSessions}/$chatId/calls/$callId/status',
       data: <String, dynamic>{
         'status': status,
-        ...?endedBy == null
-            ? null
-            : <String, dynamic>{'endedBy': endedBy},
+        ...?endedBy == null ? null : <String, dynamic>{'endedBy': endedBy},
       },
     );
   }

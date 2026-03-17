@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +16,7 @@ import '../services/auth_service.dart';
 import '../services/chat_push_service.dart';
 import '../services/puja_call_service.dart';
 import '../theme/app_theme.dart';
+import 'admin_user_astro_profile_screen.dart';
 import 'puja_video_call_screen.dart';
 import 'support_call_screen.dart';
 
@@ -70,10 +73,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           children: <Widget>[
             Text(
               titles[_currentIndex],
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-              ),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 2),
             Text(
@@ -163,198 +163,203 @@ class _AllChatsTabState extends State<_AllChatsTab> {
     return StreamBuilder<List<AdminChatSession>>(
       key: ValueKey<int>(_refreshSeed),
       stream: _chatService.getAllChatsForAdmin(),
-      builder: (
-        BuildContext context,
-        AsyncSnapshot<List<AdminChatSession>> snapshot,
-      ) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return RefreshIndicator(
-            onRefresh: _reload,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: const <Widget>[
-                SizedBox(height: 240),
-                Center(child: CircularProgressIndicator()),
-              ],
-            ),
-          );
-        }
-        if (snapshot.hasError) {
-          return RefreshIndicator(
-            onRefresh: _reload,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: <Widget>[
-                _StateMessage(
-                  icon: Icons.error_outline_rounded,
-                  title: 'Unable to load chats',
-                  subtitle: 'Please check Firebase connection and try again.',
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<List<AdminChatSession>> snapshot,
+          ) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return RefreshIndicator(
+                onRefresh: _reload,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const <Widget>[
+                    SizedBox(height: 240),
+                    Center(child: CircularProgressIndicator()),
+                  ],
                 ),
-              ],
-            ),
-          );
-        }
-        final List<AdminChatSession> chats =
-            snapshot.data ?? <AdminChatSession>[];
-        if (chats.isEmpty) {
-          return RefreshIndicator(
-            onRefresh: _reload,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: const <Widget>[
-                _StateMessage(
-                  icon: Icons.mark_chat_unread_outlined,
-                  title: 'No chats yet',
-                  subtitle:
-                      'User conversations will appear here automatically.',
-                ),
-              ],
-            ),
-          );
-        }
-        return RefreshIndicator(
-          onRefresh: _reload,
-          child: ListView.separated(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
-            itemCount: chats.length,
-            separatorBuilder: (BuildContext context, int index) =>
-                const SizedBox(height: 12),
-            itemBuilder: (BuildContext context, int index) {
-              final AdminChatSession chat = chats[index];
-              return InkWell(
-                borderRadius: BorderRadius.circular(24),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => _AdminChatDetailScreen(chat: chat),
+              );
+            }
+            if (snapshot.hasError) {
+              return RefreshIndicator(
+                onRefresh: _reload,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: <Widget>[
+                    _StateMessage(
+                      icon: Icons.error_outline_rounded,
+                      title: 'Unable to load chats',
+                      subtitle:
+                          'Please check Firebase connection and try again.',
                     ),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: AdminAppTheme.glassCard(),
-                  child: Row(
-                    children: <Widget>[
-                      Stack(
+                  ],
+                ),
+              );
+            }
+            final List<AdminChatSession> chats =
+                snapshot.data ?? <AdminChatSession>[];
+            if (chats.isEmpty) {
+              return RefreshIndicator(
+                onRefresh: _reload,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const <Widget>[
+                    _StateMessage(
+                      icon: Icons.mark_chat_unread_outlined,
+                      title: 'No chats yet',
+                      subtitle:
+                          'User conversations will appear here automatically.',
+                    ),
+                  ],
+                ),
+              );
+            }
+            return RefreshIndicator(
+              onRefresh: _reload,
+              child: ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+                itemCount: chats.length,
+                separatorBuilder: (BuildContext context, int index) =>
+                    const SizedBox(height: 12),
+                itemBuilder: (BuildContext context, int index) {
+                  final AdminChatSession chat = chats[index];
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(24),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => _AdminChatDetailScreen(chat: chat),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: AdminAppTheme.glassCard(),
+                      child: Row(
                         children: <Widget>[
-                          CircleAvatar(
-                            radius: 28,
-                            backgroundColor:
-                                AdminAppTheme.royal.withValues(alpha: 0.12),
-                            backgroundImage:
-                                (chat.userAvatar ?? '').trim().isNotEmpty
+                          Stack(
+                            children: <Widget>[
+                              CircleAvatar(
+                                radius: 28,
+                                backgroundColor: AdminAppTheme.royal.withValues(
+                                  alpha: 0.12,
+                                ),
+                                backgroundImage:
+                                    (chat.userAvatar ?? '').trim().isNotEmpty
                                     ? NetworkImage(chat.userAvatar!)
                                     : null,
-                            child: (chat.userAvatar ?? '').trim().isEmpty
-                                ? Text(
-                                    chat.userName.isEmpty
-                                        ? 'U'
-                                        : chat.userName[0].toUpperCase(),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      color: AdminAppTheme.royal,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          if (chat.isUserOnline)
-                            Positioned(
-                              right: 2,
-                              bottom: 2,
-                              child: Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: AdminAppTheme.success,
-                                  shape: BoxShape.circle,
-                                  border:
-                                      Border.all(color: Colors.white, width: 2),
-                                ),
+                                child: (chat.userAvatar ?? '').trim().isEmpty
+                                    ? Text(
+                                        chat.userName.isEmpty
+                                            ? 'U'
+                                            : chat.userName[0].toUpperCase(),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          color: AdminAppTheme.royal,
+                                        ),
+                                      )
+                                    : null,
                               ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Row(
-                              children: <Widget>[
-                                Expanded(
-                                  child: Text(
-                                    chat.userName,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
+                              if (chat.isUserOnline)
+                                Positioned(
+                                  right: 2,
+                                  bottom: 2,
+                                  child: Container(
+                                    width: 12,
+                                    height: 12,
+                                    decoration: BoxDecoration(
+                                      color: AdminAppTheme.success,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
+                                      ),
                                     ),
                                   ),
                                 ),
+                            ],
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Row(
+                                  children: <Widget>[
+                                    Expanded(
+                                      child: Text(
+                                        chat.userName,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      _formatDateTime(chat.lastMessageTime),
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        color: AdminAppTheme.muted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
                                 Text(
-                                  _formatDateTime(chat.lastMessageTime),
+                                  chat.userPhone?.trim().isNotEmpty == true
+                                      ? chat.userPhone!
+                                      : 'User ID: ${chat.userId}',
                                   style: const TextStyle(
-                                    fontSize: 11.5,
+                                    fontSize: 12.5,
                                     color: AdminAppTheme.muted,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  chat.lastMessage.isEmpty
+                                      ? 'Tap to open conversation'
+                                      : chat.lastMessage,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    height: 1.35,
+                                    color: AdminAppTheme.ink,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              chat.userPhone?.trim().isNotEmpty == true
-                                  ? chat.userPhone!
-                                  : 'User ID: ${chat.userId}',
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                color: AdminAppTheme.muted,
-                                fontWeight: FontWeight.w600,
+                          ),
+                          if (chat.unreadCount > 0) ...<Widget>[
+                            const SizedBox(width: 10),
+                            Container(
+                              width: 28,
+                              height: 28,
+                              alignment: Alignment.center,
+                              decoration: const BoxDecoration(
+                                color: AdminAppTheme.gold,
+                                shape: BoxShape.circle,
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              chat.lastMessage.isEmpty
-                                  ? 'Tap to open conversation'
-                                  : chat.lastMessage,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13.5,
-                                height: 1.35,
-                                color: AdminAppTheme.ink,
+                              child: Text(
+                                '${chat.unreadCount}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                           ],
-                        ),
+                        ],
                       ),
-                      if (chat.unreadCount > 0) ...<Widget>[
-                        const SizedBox(width: 10),
-                        Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: const BoxDecoration(
-                            color: AdminAppTheme.gold,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '${chat.unreadCount}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
+                    ),
+                  );
+                },
+              ),
+            );
+          },
     );
   }
 }
@@ -374,6 +379,12 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
   final ChatPushService _chatPushService = ChatPushService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final List<AdminMessage> _fallbackMessages = <AdminMessage>[];
+  final Set<String> _fallbackSignatures = <String>{};
+  Timer? _fallbackSessionPollTimer;
+  String? _lastSessionSnapshotSignature;
+  String _lastLocalSentText = '';
+  DateTime? _lastLocalSentAt;
   String _adminName = 'Admin';
   int _adminUserId = 1;
   bool _sending = false;
@@ -383,9 +394,11 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _seedFallbackFromChatSummary();
     _loadProfile();
     // Don't let read-sync failures block opening the chat screen.
     _chatService.markMessagesAsRead(widget.chat.chatId);
+    _startFallbackSessionSync();
   }
 
   Future<void> _loadProfile() async {
@@ -407,30 +420,199 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
     return (await SharedPreferences.getInstance()).getInt('userId') ?? 1;
   }
 
+  void _seedFallbackFromChatSummary() {
+    final String summary = widget.chat.lastMessage.trim();
+    if (summary.isEmpty) return;
+    final DateTime timestamp = widget.chat.lastMessageTime;
+    final String signature = _messageSignature(
+      senderRole: 'user',
+      content: summary,
+      timestamp: timestamp,
+    );
+    _fallbackSignatures.add(signature);
+    _fallbackMessages.add(
+      _buildFallbackMessage(
+        senderRole: 'user',
+        senderName: widget.chat.userName,
+        content: summary,
+        timestamp: timestamp,
+        signature: signature,
+      ),
+    );
+    _lastSessionSnapshotSignature = signature;
+  }
+
+  void _startFallbackSessionSync() {
+    _fallbackSessionPollTimer?.cancel();
+    _syncFallbackFromSession();
+    _fallbackSessionPollTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _syncFallbackFromSession(),
+    );
+  }
+
+  Future<void> _syncFallbackFromSession() async {
+    try {
+      final AdminChatSession session = await _chatService.getChatSession(
+        widget.chat.chatId,
+      );
+      final String content = session.lastMessage.trim();
+      if (content.isEmpty) return;
+
+      final DateTime timestamp = session.lastMessageTime;
+      final bool looksLikeLocalAdminMessage =
+          _lastLocalSentText.isNotEmpty &&
+          _lastLocalSentText == content &&
+          _lastLocalSentAt != null &&
+          DateTime.now().difference(_lastLocalSentAt!).inSeconds <= 25;
+
+      final String senderRole = looksLikeLocalAdminMessage ? 'admin' : 'user';
+      final String senderName = looksLikeLocalAdminMessage
+          ? _adminName
+          : widget.chat.userName;
+
+      final String signature = _messageSignature(
+        senderRole: senderRole,
+        content: content,
+        timestamp: timestamp,
+      );
+      if (_lastSessionSnapshotSignature == signature) return;
+      _lastSessionSnapshotSignature = signature;
+      if (_fallbackSignatures.contains(signature)) return;
+
+      _fallbackSignatures.add(signature);
+      _fallbackMessages.add(
+        _buildFallbackMessage(
+          senderRole: senderRole,
+          senderName: senderName,
+          content: content,
+          timestamp: timestamp,
+          signature: signature,
+        ),
+      );
+      _fallbackMessages.sort(
+        (AdminMessage a, AdminMessage b) => a.timestamp.compareTo(b.timestamp),
+      );
+      if (senderRole == 'user') {
+        _chatService.markMessagesAsRead(widget.chat.chatId);
+      }
+      if (!mounted) return;
+      setState(() {});
+    } catch (_) {
+      // Non-blocking fallback sync.
+    }
+  }
+
+  String _messageSignature({
+    required String senderRole,
+    required String content,
+    required DateTime timestamp,
+  }) {
+    final normalizedContent = content.trim();
+    return '$senderRole|$normalizedContent|${timestamp.millisecondsSinceEpoch}';
+  }
+
+  AdminMessage _buildFallbackMessage({
+    required String senderRole,
+    required String senderName,
+    required String content,
+    required DateTime timestamp,
+    required String signature,
+  }) {
+    return AdminMessage(
+      id: 'fallback_$signature',
+      chatId: widget.chat.chatId,
+      senderId: senderRole == 'admin' ? _adminUserId : widget.chat.userId,
+      senderName: senderName,
+      senderRole: senderRole,
+      messageType: 'text',
+      content: content,
+      timestamp: timestamp,
+      isRead: senderRole == 'admin',
+    );
+  }
+
+  List<AdminMessage> _resolveRenderableMessages(List<AdminMessage> streamData) {
+    final List<AdminMessage> merged = <AdminMessage>[
+      ...streamData,
+      ..._fallbackMessages,
+    ];
+    final Map<String, AdminMessage> bySignature = <String, AdminMessage>{};
+    for (final AdminMessage message in merged) {
+      final String signature = _messageSignature(
+        senderRole: message.senderRole,
+        content: message.content,
+        timestamp: message.timestamp,
+      );
+      bySignature[signature] = message;
+    }
+    final List<AdminMessage> output = bySignature.values.toList()
+      ..sort((AdminMessage a, AdminMessage b) {
+        return a.timestamp.compareTo(b.timestamp);
+      });
+    return output;
+  }
+
+  bool get _isHindi => AppPreferences.isHindiNotifier.value;
+
+  String _tr(String en, String hi) => _isHindi ? hi : en;
+
+  String get _chatInfoText => _tr(
+    'Admin support chat. You can send text messages and start audio/video calls.',
+    'एडमिन सपोर्ट चैट। आप टेक्स्ट संदेश भेज सकते हैं और ऑडियो/वीडियो कॉल शुरू कर सकते हैं।',
+  );
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+      );
+  }
+
+  Future<void> _notifyUser({
+    required String messageType,
+    required String content,
+  }) async {
+    await _chatPushService.sendChatNotificationToUser(
+      recipientUserId: widget.chat.userId,
+      recipientMobileNo: widget.chat.userPhone,
+      senderName: _adminName,
+      messageType: messageType,
+      content: content,
+      notificationType: 'SESSION',
+      actionData: <String, dynamic>{
+        'source': 'chat',
+        'chatId': widget.chat.chatId,
+        'targetRole': 'user',
+        'callerName': _adminName,
+      },
+    );
+  }
+
   Future<void> _send() async {
     final String text = _messageController.text.trim();
     if (text.isEmpty || _sending) {
       return;
     }
+    _lastLocalSentText = text;
+    _lastLocalSentAt = DateTime.now();
     setState(() => _sending = true);
     try {
       await _chatService.sendTextMessage(
         chatId: widget.chat.chatId,
         content: text,
         senderName: _adminName,
+        senderId: _adminUserId,
       );
+      await _notifyUser(messageType: 'text', content: text);
       _messageController.clear();
       _chatService.markMessagesAsRead(widget.chat.chatId);
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text('Failed to send message: $e'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+      _showError(
+        _tr('Failed to send message: $e', 'संदेश भेजने में समस्या हुई: $e'),
+      );
     } finally {
       if (mounted) {
         setState(() => _sending = false);
@@ -495,8 +677,9 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content:
-                Text('Failed to start ${isVideo ? "video" : "audio"} call: $e'),
+            content: Text(
+              'Failed to start ${isVideo ? "video" : "audio"} call: $e',
+            ),
           ),
         );
     } finally {
@@ -512,8 +695,22 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
     }
   }
 
+  Future<void> _openUserAstroInsights() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminUserAstroProfileScreen(
+          userId: widget.chat.userId,
+          userName: widget.chat.userName,
+          userPhone: widget.chat.userPhone,
+          userAvatar: widget.chat.userAvatar,
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _fallbackSessionPollTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -521,32 +718,64 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final String phoneOrId = widget.chat.userPhone?.trim().isNotEmpty == true
+        ? widget.chat.userPhone!
+        : '${_tr('User ID', 'यूज़र आईडी')}: ${widget.chat.userId}';
+
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: isDark
+            ? const Color(0xFF0F1219)
+            : AdminAppTheme.gold.withValues(alpha: 0.26),
+        foregroundColor: isDark ? Colors.white : AdminAppTheme.royal,
         titleSpacing: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: <Widget>[
-            Text(
-              widget.chat.userName,
-              style: const TextStyle(fontWeight: FontWeight.w800),
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.transparent,
+              child: _buildUserAvatar(),
             ),
-            Text(
-              widget.chat.userPhone?.trim().isNotEmpty == true
-                  ? widget.chat.userPhone!
-                  : 'User ID: ${widget.chat.userId}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AdminAppTheme.muted,
-                fontWeight: FontWeight.w500,
+            const SizedBox(width: 10),
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: _openUserAstroInsights,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        widget.chat.userName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        phoneOrId,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white70 : AdminAppTheme.muted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],
         ),
         actions: <Widget>[
           IconButton(
-            onPressed:
-                _startingAudioCall ? null : () => _startSupportCall('audio'),
+            onPressed: _startingAudioCall
+                ? null
+                : () => _startSupportCall('audio'),
+            tooltip: _tr('Audio call', 'ऑडियो कॉल'),
             icon: _startingAudioCall
                 ? const SizedBox(
                     width: 18,
@@ -556,8 +785,10 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
                 : const Icon(Icons.call_rounded),
           ),
           IconButton(
-            onPressed:
-                _startingVideoCall ? null : () => _startSupportCall('video'),
+            onPressed: _startingVideoCall
+                ? null
+                : () => _startSupportCall('video'),
+            tooltip: _tr('Video call', 'वीडियो कॉल'),
             icon: _startingVideoCall
                 ? const SizedBox(
                     width: 18,
@@ -570,164 +801,328 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
         ],
       ),
       body: Container(
-        decoration: AdminAppTheme.pageBackdrop(
-          isDark: Theme.of(context).brightness == Brightness.dark,
-        ),
+        decoration: AdminAppTheme.pageBackdrop(isDark: isDark),
         child: Column(
           children: <Widget>[
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1B1F2B) : Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: isDark ? AdminAppTheme.gold : AdminAppTheme.royal,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _chatInfoText,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white70 : AdminAppTheme.royal,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: StreamBuilder<List<AdminMessage>>(
                 stream: _chatService.getMessagesStream(widget.chat.chatId),
-                builder: (
-                  BuildContext context,
-                  AsyncSnapshot<List<AdminMessage>> snapshot,
-                ) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return _StateMessage(
-                      icon: Icons.error_outline_rounded,
-                      title: 'Unable to load messages',
-                      subtitle:
-                          'Please try again. If it persists, check chat configuration.',
-                    );
-                  }
-                  final List<AdminMessage> messages =
-                      snapshot.data ?? <AdminMessage>[];
-                  if (messages.isEmpty) {
-                    return const _StateMessage(
-                      icon: Icons.chat_bubble_outline_rounded,
-                      title: 'No messages yet',
-                      subtitle: 'Send a message to start the conversation.',
-                    );
-                  }
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (_scrollController.hasClients) {
-                      _scrollController.jumpTo(
-                        _scrollController.position.maxScrollExtent,
-                      );
-                    }
-                  });
-                  return ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-                    itemCount: messages.length,
-                    itemBuilder: (BuildContext context, int index) {
-                      final AdminMessage message = messages[index];
-                      final bool isAdmin = message.senderRole == 'admin';
-                      return Align(
-                        alignment: isAdmin
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(14),
-                          constraints: BoxConstraints(
-                            maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+                builder:
+                    (
+                      BuildContext context,
+                      AsyncSnapshot<List<AdminMessage>> snapshot,
+                    ) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return _StateMessage(
+                          icon: Icons.error_outline_rounded,
+                          title: _tr(
+                            'Unable to load messages',
+                            'मैसेज लोड नहीं हुए',
                           ),
-                          decoration: BoxDecoration(
-                            color: isAdmin
-                                ? AdminAppTheme.gold.withValues(alpha: 0.32)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: <BoxShadow>[
-                              BoxShadow(
-                                color:
-                                    AdminAppTheme.royal.withValues(alpha: 0.08),
-                                blurRadius: 16,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
+                          subtitle: _tr(
+                            'Please try again. If it persists, check chat configuration.',
+                            'कृपया दोबारा प्रयास करें। समस्या जारी रहे तो चैट कॉन्फ़िगरेशन जांचें।',
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                message.senderName,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: isAdmin
-                                      ? AdminAppTheme.ink
-                                      : AdminAppTheme.royal,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              if ((message.mediaUrl ?? '').trim().isNotEmpty &&
-                                  message.messageType == 'image') ...<Widget>[
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: Image.network(
-                                    message.mediaUrl!,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                              ],
-                              Text(
-                                message.content,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  height: 1.35,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                DateFormat('dd MMM, hh:mm a')
-                                    .format(message.timestamp),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AdminAppTheme.muted,
-                                ),
-                              ),
-                            ],
+                        );
+                      }
+                      final List<AdminMessage> messages =
+                          _resolveRenderableMessages(
+                            snapshot.data ?? <AdminMessage>[],
+                          );
+                      if (messages.isEmpty) {
+                        return _StateMessage(
+                          icon: Icons.chat_bubble_outline_rounded,
+                          title: _tr(
+                            'No messages yet',
+                            'अभी तक कोई संदेश नहीं है',
                           ),
-                        ),
+                          subtitle: _tr(
+                            'Send a message to start the conversation.',
+                            'बातचीत शुरू करने के लिए संदेश भेजें।',
+                          ),
+                        );
+                      }
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_scrollController.hasClients) {
+                          _scrollController.animateTo(
+                            _scrollController.position.maxScrollExtent,
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOut,
+                          );
+                        }
+                      });
+                      return ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                        itemCount: messages.length,
+                        itemBuilder: (BuildContext context, int index) {
+                          final AdminMessage message = messages[index];
+                          final bool isAdmin = message.senderRole == 'admin';
+                          return _buildMessageBubble(
+                            message: message,
+                            isAdmin: isAdmin,
+                            isDark: isDark,
+                          );
+                        },
                       );
                     },
-                  );
-                },
               ),
             ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: TextField(
-                        controller: _messageController,
-                        minLines: 1,
-                        maxLines: 4,
-                        decoration: const InputDecoration(
-                          hintText: 'Type a reply...',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    IconButton.filled(
-                      onPressed: _sending ? null : _send,
-                      style: IconButton.styleFrom(
-                        backgroundColor: AdminAppTheme.gold,
-                        foregroundColor: AdminAppTheme.ink,
-                        padding: const EdgeInsets.all(16),
-                      ),
-                      icon: _sending
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AdminAppTheme.ink,
-                              ),
-                            )
-                          : const Icon(Icons.send_rounded),
-                    ),
-                  ],
+            _buildInputBar(isDark: isDark),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserAvatar() {
+    final String source = (widget.chat.userAvatar ?? '').trim();
+    if (source.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          source,
+          width: 36,
+          height: 36,
+          fit: BoxFit.cover,
+          errorBuilder: (_, error, stackTrace) => _buildAvatarFallback(),
+        ),
+      );
+    }
+    return _buildAvatarFallback();
+  }
+
+  Widget _buildAvatarFallback() {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: const BoxDecoration(
+        color: AdminAppTheme.royal,
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        widget.chat.userName.isEmpty ? 'U' : widget.chat.userName[0],
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble({
+    required AdminMessage message,
+    required bool isAdmin,
+    required bool isDark,
+  }) {
+    final Color bubbleColor = isAdmin
+        ? (isDark ? const Color(0xFF2A2E3B) : AdminAppTheme.cream)
+        : (isDark ? const Color(0xFF1B1F2B) : Colors.white);
+    final Color nameColor = isAdmin ? AdminAppTheme.gold : AdminAppTheme.royal;
+
+    return Align(
+      alignment: isAdmin ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.76,
+        ),
+        decoration: BoxDecoration(
+          color: bubbleColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : AdminAppTheme.royal.withValues(alpha: 0.08),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              message.senderName,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: nameColor,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message.content,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.35,
+                color: isDark ? Colors.white : AdminAppTheme.ink,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              DateFormat('HH:mm').format(message.timestamp),
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.white54 : AdminAppTheme.muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAttachmentOptions() {
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetContext) {
+        final bool isDark =
+            Theme.of(sheetContext).brightness == Brightness.dark;
+        return Container(
+          height: 220,
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF171A24) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.14),
+                blurRadius: 20,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                width: 38,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.photo_library_rounded),
+                title: Text(_tr('Photos', 'फोटो')),
+                onTap: () => _showAttachmentComingSoon(_tr('Photos', 'फोटो')),
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.camera_alt_rounded),
+                title: Text(_tr('Camera', 'कैमरा')),
+                onTap: () => _showAttachmentComingSoon(_tr('Camera', 'कैमरा')),
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.description_rounded),
+                title: Text(_tr('Document', 'डॉक्यूमेंट')),
+                onTap: () =>
+                    _showAttachmentComingSoon(_tr('Document', 'डॉक्यूमेंट')),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAttachmentComingSoon(String label) {
+    Navigator.of(context).pop();
+    _showError(
+      _tr(
+        '$label attachment will be enabled next.',
+        '$label अटैचमेंट अगली अपडेट में उपलब्ध होगा।',
+      ),
+    );
+  }
+
+  Widget _buildInputBar({required bool isDark}) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1B1F2B) : AdminAppTheme.royal,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: <Widget>[
+            IconButton(
+              onPressed: _showAttachmentOptions,
+              tooltip: _tr('Attach', 'अटैच'),
+              icon: const Icon(Icons.attach_file, color: AdminAppTheme.gold),
+            ),
+            Expanded(
+              child: TextField(
+                controller: _messageController,
+                minLines: 1,
+                maxLines: 4,
+                style: const TextStyle(color: Colors.white),
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _send(),
+                decoration: InputDecoration(
+                  hintText: _tr('Type a reply…', 'उत्तर टाइप करें…'),
+                  hintStyle: const TextStyle(color: Colors.white54),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: false,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            IconButton(
+              onPressed: _sending ? null : _send,
+              tooltip: _tr('Send', 'भेजें'),
+              icon: _sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AdminAppTheme.gold,
+                      ),
+                    )
+                  : const Icon(Icons.send_rounded, color: AdminAppTheme.gold),
             ),
           ],
         ),
@@ -763,87 +1158,92 @@ class _BookedPujaTabState extends State<_BookedPujaTab> {
   Widget build(BuildContext context) {
     return FutureBuilder<List<AdminPujaBooking>>(
       future: _future,
-      builder: (
-        BuildContext context,
-        AsyncSnapshot<List<AdminPujaBooking>> snapshot,
-      ) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return _StateMessage(
-            icon: Icons.temple_buddhist_outlined,
-            title: 'Unable to load booked puja',
-            subtitle: 'Please check the admin booking API and try again.',
-            onRetry: _reload,
-          );
-        }
-        final List<AdminPujaBooking> items =
-            snapshot.data ?? <AdminPujaBooking>[];
-        if (items.isEmpty) {
-          return const _StateMessage(
-            icon: Icons.event_busy_outlined,
-            title: 'No puja bookings',
-            subtitle: 'Booked puja records will appear here.',
-          );
-        }
-        final List<AdminPujaBooking> upcomingItems = items
-            .where((AdminPujaBooking item) => !_isPujaCompleted(item))
-            .toList();
-        final List<AdminPujaBooking> completedItems =
-            items.where(_isPujaCompleted).toList();
-        final bool showUpcoming =
-            _selectedFilter == _BookingTimelineFilter.upcoming;
-        final List<AdminPujaBooking> filteredItems =
-            showUpcoming ? upcomingItems : completedItems;
-        return RefreshIndicator(
-          onRefresh: _reload,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
-            children: <Widget>[
-              _BookingFilterHeader(
-                title: 'Puja Timeline',
-                subtitle: 'Review scheduled ceremonies and completed rituals.',
-                primaryLabel: 'Upcoming',
-                primaryCount: upcomingItems.length,
-                secondaryLabel: 'Complete',
-                secondaryCount: completedItems.length,
-                isPrimarySelected: showUpcoming,
-                onPrimaryTap: () {
-                  setState(
-                    () => _selectedFilter = _BookingTimelineFilter.upcoming,
-                  );
-                },
-                onSecondaryTap: () {
-                  setState(
-                    () => _selectedFilter = _BookingTimelineFilter.complete,
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              if (filteredItems.isEmpty)
-                _FilteredEmptyState(
-                  icon: showUpcoming
-                      ? Icons.upcoming_outlined
-                      : Icons.verified_rounded,
-                  title:
-                      showUpcoming ? 'No upcoming puja' : 'No completed puja',
-                  subtitle: showUpcoming
-                      ? 'Freshly scheduled puja bookings will appear here.'
-                      : 'Completed puja records will appear here.',
-                )
-              else
-                ...filteredItems.map(
-                  (AdminPujaBooking item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _PujaBookingCard(item: item),
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<List<AdminPujaBooking>> snapshot,
+          ) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return _StateMessage(
+                icon: Icons.temple_buddhist_outlined,
+                title: 'Unable to load booked puja',
+                subtitle: 'Please check the admin booking API and try again.',
+                onRetry: _reload,
+              );
+            }
+            final List<AdminPujaBooking> items =
+                snapshot.data ?? <AdminPujaBooking>[];
+            if (items.isEmpty) {
+              return const _StateMessage(
+                icon: Icons.event_busy_outlined,
+                title: 'No puja bookings',
+                subtitle: 'Booked puja records will appear here.',
+              );
+            }
+            final List<AdminPujaBooking> upcomingItems = items
+                .where((AdminPujaBooking item) => !_isPujaCompleted(item))
+                .toList();
+            final List<AdminPujaBooking> completedItems = items
+                .where(_isPujaCompleted)
+                .toList();
+            final bool showUpcoming =
+                _selectedFilter == _BookingTimelineFilter.upcoming;
+            final List<AdminPujaBooking> filteredItems = showUpcoming
+                ? upcomingItems
+                : completedItems;
+            return RefreshIndicator(
+              onRefresh: _reload,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+                children: <Widget>[
+                  _BookingFilterHeader(
+                    title: 'Puja Timeline',
+                    subtitle:
+                        'Review scheduled ceremonies and completed rituals.',
+                    primaryLabel: 'Upcoming',
+                    primaryCount: upcomingItems.length,
+                    secondaryLabel: 'Complete',
+                    secondaryCount: completedItems.length,
+                    isPrimarySelected: showUpcoming,
+                    onPrimaryTap: () {
+                      setState(
+                        () => _selectedFilter = _BookingTimelineFilter.upcoming,
+                      );
+                    },
+                    onSecondaryTap: () {
+                      setState(
+                        () => _selectedFilter = _BookingTimelineFilter.complete,
+                      );
+                    },
                   ),
-                ),
-            ],
-          ),
-        );
-      },
+                  const SizedBox(height: 16),
+                  if (filteredItems.isEmpty)
+                    _FilteredEmptyState(
+                      icon: showUpcoming
+                          ? Icons.upcoming_outlined
+                          : Icons.verified_rounded,
+                      title: showUpcoming
+                          ? 'No upcoming puja'
+                          : 'No completed puja',
+                      subtitle: showUpcoming
+                          ? 'Freshly scheduled puja bookings will appear here.'
+                          : 'Completed puja records will appear here.',
+                    )
+                  else
+                    ...filteredItems.map(
+                      (AdminPujaBooking item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _PujaBookingCard(item: item),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
     );
   }
 }
@@ -875,88 +1275,92 @@ class _BookedRemediesTabState extends State<_BookedRemediesTab> {
   Widget build(BuildContext context) {
     return FutureBuilder<List<AdminRemedyBooking>>(
       future: _future,
-      builder: (
-        BuildContext context,
-        AsyncSnapshot<List<AdminRemedyBooking>> snapshot,
-      ) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return _StateMessage(
-            icon: Icons.auto_awesome_outlined,
-            title: 'Unable to load remedy bookings',
-            subtitle: 'Please check the admin remedies API and try again.',
-            onRetry: _reload,
-          );
-        }
-        final List<AdminRemedyBooking> items =
-            snapshot.data ?? <AdminRemedyBooking>[];
-        if (items.isEmpty) {
-          return const _StateMessage(
-            icon: Icons.inventory_2_outlined,
-            title: 'No remedy bookings',
-            subtitle: 'Paid remedy orders will appear here.',
-          );
-        }
-        final List<AdminRemedyBooking> upcomingItems = items
-            .where((AdminRemedyBooking item) => !_isRemedyCompleted(item))
-            .toList();
-        final List<AdminRemedyBooking> completedItems =
-            items.where(_isRemedyCompleted).toList();
-        final bool showUpcoming =
-            _selectedFilter == _BookingTimelineFilter.upcoming;
-        final List<AdminRemedyBooking> filteredItems =
-            showUpcoming ? upcomingItems : completedItems;
-        return RefreshIndicator(
-          onRefresh: _reload,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
-            children: <Widget>[
-              _BookingFilterHeader(
-                title: 'Remedy Orders',
-                subtitle: 'Separate active deliveries from completed orders.',
-                primaryLabel: 'Upcoming',
-                primaryCount: upcomingItems.length,
-                secondaryLabel: 'Complete',
-                secondaryCount: completedItems.length,
-                isPrimarySelected: showUpcoming,
-                onPrimaryTap: () {
-                  setState(
-                    () => _selectedFilter = _BookingTimelineFilter.upcoming,
-                  );
-                },
-                onSecondaryTap: () {
-                  setState(
-                    () => _selectedFilter = _BookingTimelineFilter.complete,
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              if (filteredItems.isEmpty)
-                _FilteredEmptyState(
-                  icon: showUpcoming
-                      ? Icons.local_shipping_outlined
-                      : Icons.check_circle_outline_rounded,
-                  title: showUpcoming
-                      ? 'No upcoming remedy orders'
-                      : 'No completed remedy orders',
-                  subtitle: showUpcoming
-                      ? 'Orders in progress will appear here.'
-                      : 'Delivered or completed remedy orders will appear here.',
-                )
-              else
-                ...filteredItems.map(
-                  (AdminRemedyBooking item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _RemedyBookingCard(item: item),
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<List<AdminRemedyBooking>> snapshot,
+          ) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return _StateMessage(
+                icon: Icons.auto_awesome_outlined,
+                title: 'Unable to load remedy bookings',
+                subtitle: 'Please check the admin remedies API and try again.',
+                onRetry: _reload,
+              );
+            }
+            final List<AdminRemedyBooking> items =
+                snapshot.data ?? <AdminRemedyBooking>[];
+            if (items.isEmpty) {
+              return const _StateMessage(
+                icon: Icons.inventory_2_outlined,
+                title: 'No remedy bookings',
+                subtitle: 'Paid remedy orders will appear here.',
+              );
+            }
+            final List<AdminRemedyBooking> upcomingItems = items
+                .where((AdminRemedyBooking item) => !_isRemedyCompleted(item))
+                .toList();
+            final List<AdminRemedyBooking> completedItems = items
+                .where(_isRemedyCompleted)
+                .toList();
+            final bool showUpcoming =
+                _selectedFilter == _BookingTimelineFilter.upcoming;
+            final List<AdminRemedyBooking> filteredItems = showUpcoming
+                ? upcomingItems
+                : completedItems;
+            return RefreshIndicator(
+              onRefresh: _reload,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+                children: <Widget>[
+                  _BookingFilterHeader(
+                    title: 'Remedy Orders',
+                    subtitle:
+                        'Separate active deliveries from completed orders.',
+                    primaryLabel: 'Upcoming',
+                    primaryCount: upcomingItems.length,
+                    secondaryLabel: 'Complete',
+                    secondaryCount: completedItems.length,
+                    isPrimarySelected: showUpcoming,
+                    onPrimaryTap: () {
+                      setState(
+                        () => _selectedFilter = _BookingTimelineFilter.upcoming,
+                      );
+                    },
+                    onSecondaryTap: () {
+                      setState(
+                        () => _selectedFilter = _BookingTimelineFilter.complete,
+                      );
+                    },
                   ),
-                ),
-            ],
-          ),
-        );
-      },
+                  const SizedBox(height: 16),
+                  if (filteredItems.isEmpty)
+                    _FilteredEmptyState(
+                      icon: showUpcoming
+                          ? Icons.local_shipping_outlined
+                          : Icons.check_circle_outline_rounded,
+                      title: showUpcoming
+                          ? 'No upcoming remedy orders'
+                          : 'No completed remedy orders',
+                      subtitle: showUpcoming
+                          ? 'Orders in progress will appear here.'
+                          : 'Delivered or completed remedy orders will appear here.',
+                    )
+                  else
+                    ...filteredItems.map(
+                      (AdminRemedyBooking item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _RemedyBookingCard(item: item),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
     );
   }
 }
@@ -995,7 +1399,8 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-            _tr('Admin profile refreshed', 'एडमिन प्रोफ़ाइल रीफ्रेश हो गई')),
+          _tr('Admin profile refreshed', 'एडमिन प्रोफ़ाइल रीफ्रेश हो गई'),
+        ),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -1079,10 +1484,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
               const SizedBox(height: 20),
               Text(
                 _tr('Access & Security', 'एक्सेस और सुरक्षा'),
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 10),
               Text(
@@ -1147,7 +1549,10 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
       return;
     }
     Navigator.pushNamedAndRemoveUntil(
-        context, '/login', (Route<dynamic> _) => false);
+      context,
+      '/login',
+      (Route<dynamic> _) => false,
+    );
   }
 
   @override
@@ -1155,10 +1560,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
     final bool dark = Theme.of(context).brightness == Brightness.dark;
     return FutureBuilder<Map<String, String>>(
       future: _profileFuture,
-      builder: (
-        BuildContext context,
-        AsyncSnapshot<Map<String, String>> snapshot,
-      ) {
+      builder: (BuildContext context, AsyncSnapshot<Map<String, String>> snapshot) {
         final Map<String, String> profile = snapshot.data ?? <String, String>{};
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
@@ -1177,10 +1579,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                 children: <Widget>[
                   Text(
                     _tr('Admin Profile', 'एडमिन प्रोफ़ाइल'),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 14),
                   _SettingsRow(
@@ -1217,10 +1616,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                 children: <Widget>[
                   Text(
                     _tr('Quick Actions', 'त्वरित क्रियाएँ'),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 14),
                   SwitchListTile(
@@ -1229,8 +1625,10 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                     secondary: const Icon(Icons.language_rounded),
                     title: Text(_tr('Hindi Language', 'हिंदी भाषा')),
                     subtitle: Text(
-                      _tr('Toggle Hindi / English labels',
-                          'हिंदी / अंग्रेज़ी लेबल बदलें'),
+                      _tr(
+                        'Toggle Hindi / English labels',
+                        'हिंदी / अंग्रेज़ी लेबल बदलें',
+                      ),
                     ),
                     onChanged: _toggleLanguage,
                   ),
@@ -1241,8 +1639,10 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                     secondary: const Icon(Icons.dark_mode_rounded),
                     title: Text(_tr('Dark Theme', 'डार्क थीम')),
                     subtitle: Text(
-                      _tr('Enable premium dark appearance',
-                          'प्रीमियम डार्क रूप सक्षम करें'),
+                      _tr(
+                        'Enable premium dark appearance',
+                        'प्रीमियम डार्क रूप सक्षम करें',
+                      ),
                     ),
                     onChanged: _toggleTheme,
                   ),
@@ -1267,8 +1667,10 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                   ),
                   _SettingsActionTile(
                     icon: Icons.content_copy_rounded,
-                    title:
-                        _tr('Copy Support Mobile', 'सपोर्ट मोबाइल कॉपी करें'),
+                    title: _tr(
+                      'Copy Support Mobile',
+                      'सपोर्ट मोबाइल कॉपी करें',
+                    ),
                     subtitle: _tr(
                       'Quickly copy the admin support number for follow-up.',
                       'फॉलो-अप के लिए एडमिन सपोर्ट नंबर जल्दी कॉपी करें।',
@@ -1297,10 +1699,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                 children: <Widget>[
                   Text(
                     _tr('Workspace Summary', 'वर्कस्पेस सारांश'),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 14),
                   Text(
@@ -1388,8 +1787,9 @@ class _PujaBookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String fallbackStatus =
-        _isPujaCompleted(item) ? 'COMPLETED' : 'UPCOMING';
+    final String fallbackStatus = _isPujaCompleted(item)
+        ? 'COMPLETED'
+        : 'UPCOMING';
     final DateTime? slotTime = item.slotTime;
     final bool joinEnabled =
         !_isPujaCompleted(item) && slotTime != null && _isJoinAllowed(slotTime);
@@ -1455,10 +1855,7 @@ class _PujaBookingCard extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             'Booked ${item.bookedAt == null ? '-' : DateFormat('dd MMM yyyy, hh:mm a').format(item.bookedAt!)}',
-            style: const TextStyle(
-              fontSize: 12.5,
-              color: AdminAppTheme.muted,
-            ),
+            style: const TextStyle(fontSize: 12.5, color: AdminAppTheme.muted),
           ),
           if (item.transactionId.isNotEmpty) ...<Widget>[
             const SizedBox(height: 6),
@@ -1476,8 +1873,9 @@ class _PujaBookingCard extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      joinEnabled ? AdminAppTheme.gold : Colors.grey.shade300,
+                  backgroundColor: joinEnabled
+                      ? AdminAppTheme.gold
+                      : Colors.grey.shade300,
                   foregroundColor: AdminAppTheme.ink,
                 ),
                 onPressed: joinEnabled ? () => _join(context) : null,
@@ -1499,8 +1897,9 @@ class _RemedyBookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String fallbackStatus =
-        _isRemedyCompleted(item) ? 'COMPLETED' : 'UPCOMING';
+    final String fallbackStatus = _isRemedyCompleted(item)
+        ? 'COMPLETED'
+        : 'UPCOMING';
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: AdminAppTheme.glassCard(),
@@ -1535,10 +1934,7 @@ class _RemedyBookingCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             item.titles.join(', '),
-            style: const TextStyle(
-              fontSize: 14.5,
-              height: 1.35,
-            ),
+            style: const TextStyle(fontSize: 14.5, height: 1.35),
           ),
           const SizedBox(height: 14),
           Wrap(
@@ -1626,10 +2022,7 @@ class _BookingFilterHeader extends StatelessWidget {
         children: <Widget>[
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
           Text(
@@ -1752,10 +2145,7 @@ class _FilteredEmptyState extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-            ),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
@@ -1799,10 +2189,7 @@ class _StateMessage extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -1817,10 +2204,7 @@ class _StateMessage extends StatelessWidget {
             ),
             if (onRetry != null) ...<Widget>[
               const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: onRetry,
-                child: const Text('Retry'),
-              ),
+              ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
             ],
           ],
         ),
@@ -1830,10 +2214,7 @@ class _StateMessage extends StatelessWidget {
 }
 
 class _InfoPill extends StatelessWidget {
-  const _InfoPill({
-    required this.icon,
-    required this.label,
-  });
+  const _InfoPill({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -1866,10 +2247,7 @@ class _InfoPill extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({
-    required this.label,
-    required this.color,
-  });
+  const _StatusChip({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -1895,10 +2273,7 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _SettingsRow extends StatelessWidget {
-  const _SettingsRow({
-    required this.label,
-    required this.value,
-  });
+  const _SettingsRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -2013,10 +2388,7 @@ class _SettingsActionTile extends StatelessWidget {
 }
 
 class _GuidePoint extends StatelessWidget {
-  const _GuidePoint({
-    required this.icon,
-    required this.text,
-  });
+  const _GuidePoint({required this.icon, required this.text});
 
   final IconData icon;
   final String text;
@@ -2077,43 +2449,37 @@ bool _containsAnyKeyword(String value, List<String> keywords) {
 }
 
 bool _isFinalizedStatus(String value) {
-  return _containsAnyKeyword(
-    value,
-    <String>[
-      'complete',
-      'completed',
-      'done',
-      'deliver',
-      'success',
-      'successful',
-      'cancel',
-      'failed',
-      'refund',
-      'closed',
-    ],
-  );
+  return _containsAnyKeyword(value, <String>[
+    'complete',
+    'completed',
+    'done',
+    'deliver',
+    'success',
+    'successful',
+    'cancel',
+    'failed',
+    'refund',
+    'closed',
+  ]);
 }
 
 bool _isInProgressStatus(String value) {
-  return _containsAnyKeyword(
-    value,
-    <String>[
-      'pending',
-      'process',
-      'confirm',
-      'schedule',
-      'booked',
-      'upcoming',
-      'initiat',
-      'assign',
-      'pack',
-      'ship',
-      'dispatch',
-      'purchase',
-      'order',
-      'new',
-    ],
-  );
+  return _containsAnyKeyword(value, <String>[
+    'pending',
+    'process',
+    'confirm',
+    'schedule',
+    'booked',
+    'upcoming',
+    'initiat',
+    'assign',
+    'pack',
+    'ship',
+    'dispatch',
+    'purchase',
+    'order',
+    'new',
+  ]);
 }
 
 bool _isPujaCompleted(AdminPujaBooking item) {
@@ -2147,8 +2513,9 @@ bool _isRemedyCompleted(AdminRemedyBooking item) {
 }
 
 Color _statusColor(String status, {required String fallback}) {
-  final String normalized =
-      _normalizeStatus(status.isEmpty ? fallback : status);
+  final String normalized = _normalizeStatus(
+    status.isEmpty ? fallback : status,
+  );
   if (_containsAnyKeyword(normalized, <String>['cancel', 'failed', 'refund'])) {
     return AdminAppTheme.danger;
   }

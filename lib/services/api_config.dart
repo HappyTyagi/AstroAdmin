@@ -23,6 +23,14 @@ class ApiConfig {
   static const String adminSupportMediaUpload =
       '/api/admin-support/media/upload';
   static const String adminSupportMediaServe = '/api/admin-support/media';
+  static const String dashboard = '/astrology/dashboard';
+  static const String getProfile = '/profile/get';
+  static const String getTodayPanchang =
+      '/api/v1/astro-services/panchang/today';
+  static const String fullKundliCalculate =
+      '/api/v1/astro-services/kundli/calculate';
+  static const String predictionDailyHoroscope =
+      '/api/v1/astro-services/prediction/daily-horoscope';
   static const String agoraAppId = 'cbe31f2b8684484a92cdcb6b81ca8ab6';
   static const String agoraRtcToken = '/api/mobile/call/agora-token';
   static const String sendNotification = '/notification/send';

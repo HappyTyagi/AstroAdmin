@@ -41,14 +41,21 @@ class ApiClient {
     await prefs.remove('token');
   }
 
-  Future<Response<dynamic>> get(String path) async {
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
     await _ensureHeaders();
-    return _dio.get(path);
+    return _dio.get(path, queryParameters: queryParameters);
   }
 
-  Future<Response<dynamic>> post(String path, {Object? data}) async {
+  Future<Response<dynamic>> post(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+  }) async {
     await _ensureHeaders();
-    return _dio.post(path, data: data);
+    return _dio.post(path, data: data, queryParameters: queryParameters);
   }
 
   Future<Response<dynamic>> put(

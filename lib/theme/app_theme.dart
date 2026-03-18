@@ -273,16 +273,26 @@ class AdminAppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(54),
-          foregroundColor: Colors.white,
-          side: BorderSide(
-            color: Colors.white.withValues(alpha: 0.24),
-            width: 1.2,
-          ),
+          foregroundColor: gold,
+          side: BorderSide(color: gold.withValues(alpha: 0.56), width: 1.2),
           textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
         ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: gold,
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(foregroundColor: gold),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: gold,
+        foregroundColor: ink,
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: const Color(0xFF171A24),

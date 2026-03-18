@@ -9,7 +9,7 @@ class AdminChatLocalDb {
   AdminChatLocalDb._internal();
 
   static const String _databaseName = 'admin_support_chat_cache_v1.db';
-  static const int _databaseVersion = 1;
+  static const int _databaseVersion = 2;
   static const String _tableName = 'chat_messages';
 
   Database? _database;
@@ -41,17 +41,50 @@ CREATE TABLE $_tableName (
   file_size INTEGER,
   media_duration INTEGER,
   timestamp TEXT NOT NULL,
+  timestamp_epoch INTEGER NOT NULL,
   is_read INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL,
   UNIQUE(chat_id, message_id) ON CONFLICT REPLACE
 )
 ''');
         await db.execute(
-          'CREATE INDEX idx_chat_messages_chat_time ON $_tableName(chat_id, timestamp)',
+          'CREATE INDEX idx_chat_messages_chat_time ON $_tableName(chat_id, timestamp_epoch)',
         );
+      },
+      onUpgrade: (Database db, int oldVersion, int newVersion) async {
+        if (oldVersion < 2) {
+          await _migrateToV2(db);
+        }
       },
     );
     return _database!;
+  }
+
+  Future<void> _migrateToV2(Database db) async {
+    final List<Map<String, Object?>> tableInfo = await db.rawQuery(
+      'PRAGMA table_info($_tableName)',
+    );
+    final bool hasTimestampEpoch = tableInfo.any(
+      (Map<String, Object?> row) => row['name'] == 'timestamp_epoch',
+    );
+    if (!hasTimestampEpoch) {
+      await db.execute(
+        'ALTER TABLE $_tableName ADD COLUMN timestamp_epoch INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    await db.execute('''
+UPDATE $_tableName
+SET timestamp_epoch = CASE
+  WHEN timestamp_epoch > 0 THEN timestamp_epoch
+  ELSE COALESCE(
+    CAST(strftime('%s', replace(substr(timestamp, 1, 19), 'T', ' ')) AS INTEGER) * 1000,
+    updated_at
+  )
+END
+''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_time ON $_tableName(chat_id, timestamp_epoch)',
+    );
   }
 
   Future<void> upsertMessages(
@@ -81,6 +114,7 @@ CREATE TABLE $_tableName (
         'file_size': message.fileSize,
         'media_duration': message.mediaDuration,
         'timestamp': message.timestamp.toIso8601String(),
+        'timestamp_epoch': message.timestamp.millisecondsSinceEpoch,
         'is_read': message.isRead ? 1 : 0,
         'updated_at': updatedAt,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -101,7 +135,7 @@ CREATE TABLE $_tableName (
       _tableName,
       where: 'chat_id = ?',
       whereArgs: <Object?>[chatId],
-      orderBy: 'timestamp ASC, id ASC',
+      orderBy: 'timestamp_epoch ASC, id ASC',
       limit: limit,
     );
 

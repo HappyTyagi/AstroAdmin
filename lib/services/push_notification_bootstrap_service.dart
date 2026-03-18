@@ -5,11 +5,28 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/support_call_screen.dart';
+import 'admin_chat_service.dart';
 
 class PushNotificationBootstrapService {
   static bool _initialized = false;
   static GlobalKey<NavigatorState>? _navigatorKey;
   static final Set<String> _openedCallIds = <String>{};
+
+  static bool _isChatPushForAdmin(Map<String, dynamic>? actionData) {
+    if (actionData == null) return false;
+    final String source = (actionData['source'] ?? '').toString().toLowerCase();
+    final String chatId = (actionData['chatId'] ?? '').toString().trim();
+    final String callId = (actionData['callId'] ?? '').toString().trim();
+    final bool looksLikeChat =
+        source == 'chat' ||
+        (source.isEmpty && chatId.isNotEmpty && callId.isEmpty);
+    if (!looksLikeChat) return false;
+    final String targetRole = (actionData['targetRole'] ?? '')
+        .toString()
+        .toLowerCase();
+    if (targetRole.isEmpty) return true;
+    return targetRole == 'admin';
+  }
 
   static Future<void> initialize({
     required GlobalKey<NavigatorState> navigatorKey,
@@ -53,17 +70,80 @@ class PushNotificationBootstrapService {
     }
 
     final String source = (actionData['source'] ?? '').toString().toLowerCase();
-    final String targetRole =
-        (actionData['targetRole'] ?? '').toString().toLowerCase();
+    final String targetRole = (actionData['targetRole'] ?? '')
+        .toString()
+        .toLowerCase();
 
     if (source == 'call' && targetRole == 'admin') {
       await _openIncomingCall(message, actionData);
       return;
     }
 
-    if (source == 'chat' && targetRole == 'admin') {
+    if (_isChatPushForAdmin(actionData)) {
+      _ingestChatMessage(message, actionData);
       _navigatorKey?.currentState?.pushNamed('/home');
     }
+  }
+
+  static void _ingestChatMessage(
+    RemoteMessage message,
+    Map<String, dynamic> actionData,
+  ) {
+    final String chatId = (actionData['chatId'] ?? '').toString().trim();
+    if (chatId.isEmpty) {
+      return;
+    }
+
+    final String senderName =
+        (actionData['senderName'] ??
+                message.notification?.title ??
+                message.data['title'] ??
+                'User')
+            .toString()
+            .trim();
+    final String content =
+        (actionData['content'] ??
+                message.notification?.body ??
+                message.data['message'] ??
+                'New message')
+            .toString()
+            .trim();
+    final String id =
+        (actionData['id'] ??
+                actionData['messageId'] ??
+                'push_${DateTime.now().microsecondsSinceEpoch}')
+            .toString()
+            .trim();
+    final String timestamp = (actionData['timestamp'] ?? '').toString().trim();
+    final int? senderId = int.tryParse(
+      (actionData['senderId'] ?? '').toString().trim(),
+    );
+    final int? fileSize = int.tryParse(
+      (actionData['fileSize'] ?? '').toString().trim(),
+    );
+    final int? mediaDuration = int.tryParse(
+      (actionData['mediaDuration'] ?? '').toString().trim(),
+    );
+
+    AdminChatService().ingestPushMessage(<String, dynamic>{
+      'id': id,
+      'chatId': chatId,
+      'senderId': senderId ?? 0,
+      'senderName': senderName.isEmpty ? 'User' : senderName,
+      'senderRole': (actionData['senderRole'] ?? 'user').toString().trim(),
+      'messageType': (actionData['messageType'] ?? 'text').toString().trim(),
+      'content': content.isEmpty ? 'New message' : content,
+      'timestamp': timestamp.isEmpty
+          ? DateTime.now().toIso8601String()
+          : timestamp,
+      if ((actionData['mediaUrl'] ?? '').toString().trim().isNotEmpty)
+        'mediaUrl': (actionData['mediaUrl'] ?? '').toString().trim(),
+      if ((actionData['fileName'] ?? '').toString().trim().isNotEmpty)
+        'fileName': (actionData['fileName'] ?? '').toString().trim(),
+      if ((fileSize ?? 0) > 0) 'fileSize': fileSize,
+      if ((mediaDuration ?? 0) > 0) 'mediaDuration': mediaDuration,
+      'isRead': false,
+    });
   }
 
   static Future<void> _openIncomingCall(
@@ -74,8 +154,8 @@ class PushNotificationBootstrapService {
     final String callId = (actionData['callId'] ?? '').toString().trim();
     final String callType =
         (actionData['callType'] ?? '').toString().toLowerCase() == 'video'
-            ? 'video'
-            : 'audio';
+        ? 'video'
+        : 'audio';
     final String status = (actionData['status'] ?? '').toString().toLowerCase();
 
     if (chatId.isEmpty || callId.isEmpty) {
@@ -95,19 +175,22 @@ class PushNotificationBootstrapService {
       return;
     }
 
-    final RegExpMatch? chatMatch = RegExp(r'user_(\d+)_admin_\d+').firstMatch(chatId);
-    final int remoteUserId =
-        int.tryParse(chatMatch?.group(1) ?? '') ?? 0;
+    final RegExpMatch? chatMatch = RegExp(
+      r'user_(\d+)_admin_\d+',
+    ).firstMatch(chatId);
+    final int remoteUserId = int.tryParse(chatMatch?.group(1) ?? '') ?? 0;
     if (remoteUserId <= 0) {
       return;
     }
 
     final String title = (message.notification?.title ?? '').trim();
     final String dataTitle = (message.data['title'] ?? '').toString().trim();
-    final String callerName = ((actionData['callerName'] ?? '').toString().trim())
-            .isNotEmpty
+    final String callerName =
+        ((actionData['callerName'] ?? '').toString().trim()).isNotEmpty
         ? (actionData['callerName'] ?? '').toString().trim()
-        : (title.isNotEmpty ? title : (dataTitle.isNotEmpty ? dataTitle : 'User'));
+        : (title.isNotEmpty
+              ? title
+              : (dataTitle.isNotEmpty ? dataTitle : 'User'));
 
     final NavigatorState? navigator = _navigatorKey?.currentState;
     if (navigator == null) {
@@ -165,6 +248,28 @@ class PushNotificationBootstrapService {
         'callType': data['callType'].toString().trim(),
       if ((data['targetRole'] ?? '').toString().trim().isNotEmpty)
         'targetRole': data['targetRole'].toString().trim(),
+      if ((data['id'] ?? '').toString().trim().isNotEmpty)
+        'id': data['id'].toString().trim(),
+      if ((data['senderId'] ?? '').toString().trim().isNotEmpty)
+        'senderId': data['senderId'].toString().trim(),
+      if ((data['senderName'] ?? '').toString().trim().isNotEmpty)
+        'senderName': data['senderName'].toString().trim(),
+      if ((data['senderRole'] ?? '').toString().trim().isNotEmpty)
+        'senderRole': data['senderRole'].toString().trim(),
+      if ((data['messageType'] ?? '').toString().trim().isNotEmpty)
+        'messageType': data['messageType'].toString().trim(),
+      if ((data['content'] ?? '').toString().trim().isNotEmpty)
+        'content': data['content'].toString().trim(),
+      if ((data['timestamp'] ?? '').toString().trim().isNotEmpty)
+        'timestamp': data['timestamp'].toString().trim(),
+      if ((data['mediaUrl'] ?? '').toString().trim().isNotEmpty)
+        'mediaUrl': data['mediaUrl'].toString().trim(),
+      if ((data['fileName'] ?? '').toString().trim().isNotEmpty)
+        'fileName': data['fileName'].toString().trim(),
+      if ((data['fileSize'] ?? '').toString().trim().isNotEmpty)
+        'fileSize': data['fileSize'].toString().trim(),
+      if ((data['mediaDuration'] ?? '').toString().trim().isNotEmpty)
+        'mediaDuration': data['mediaDuration'].toString().trim(),
       if ((data['callerName'] ?? '').toString().trim().isNotEmpty)
         'callerName': data['callerName'].toString().trim(),
       if ((data['status'] ?? '').toString().trim().isNotEmpty)

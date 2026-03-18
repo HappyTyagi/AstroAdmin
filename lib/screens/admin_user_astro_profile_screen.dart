@@ -1,11 +1,29 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_html/flutter_html.dart' as html;
+import 'package:flutter_html_svg/flutter_html_svg.dart';
 import 'package:intl/intl.dart';
 
 import '../services/admin_user_astro_service.dart';
 import '../services/app_preferences.dart';
 import '../theme/app_theme.dart';
+
+class _AdminKundliChartEntry {
+  const _AdminKundliChartEntry({
+    required this.label,
+    required this.icon,
+    required this.previewText,
+    this.htmlContent,
+  });
+
+  final String label;
+  final IconData icon;
+  final String previewText;
+  final String? htmlContent;
+
+  bool get hasHtml => htmlContent != null && htmlContent!.trim().isNotEmpty;
+}
 
 class AdminUserAstroProfileScreen extends StatefulWidget {
   const AdminUserAstroProfileScreen({
@@ -290,19 +308,6 @@ class _AdminUserAstroProfileScreenState
       }
     } catch (_) {}
     return null;
-  }
-
-  List<String> _asStringList(dynamic source) {
-    if (source == null) {
-      return const <String>[];
-    }
-    final List<dynamic>? decoded = _decodeJsonList(source);
-    final List<dynamic> listValue =
-        decoded ?? (source is List ? source : <dynamic>[source]);
-    return listValue
-        .map(_formatStructuredValue)
-        .where((item) => item != '--')
-        .toList(growable: false);
   }
 
   String? _pickFirstString(Map<String, dynamic> source, List<String> keys) {
@@ -732,6 +737,9 @@ class _AdminUserAstroProfileScreenState
   }
 
   String _formatDoshaValue(dynamic source) {
+    if (source == null) {
+      return _tr('Not Present', 'मौजूद नहीं');
+    }
     final dosha = _asMap(source);
     if (dosha == null) {
       return _formatStructuredValue(source);
@@ -759,6 +767,577 @@ class _AdminUserAstroProfileScreenState
       parts.add('${_tr('Remedy', 'उपाय')}: $remedy');
     }
     return parts.join(' • ');
+  }
+
+  String _normalizeLookupKey(String key) {
+    return key.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  dynamic _lookupFlexibleValue(Map<String, dynamic>? map, String key) {
+    if (map == null || map.isEmpty) {
+      return null;
+    }
+    if (map.containsKey(key)) {
+      return map[key];
+    }
+    final String normalizedKey = _normalizeLookupKey(key);
+    if (normalizedKey.isEmpty) {
+      return null;
+    }
+    for (final MapEntry<String, dynamic> entry in map.entries) {
+      if (_normalizeLookupKey(entry.key) == normalizedKey) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
+  dynamic _resolveKundliValue(
+    Map<String, dynamic> source,
+    List<String> keys, {
+    List<String> nestedContainers = const <String>[],
+  }) {
+    for (final String key in keys) {
+      final dynamic value = _lookupFlexibleValue(source, key);
+      if (value != null) {
+        return value;
+      }
+    }
+    for (final String container in nestedContainers) {
+      final Map<String, dynamic>? nested = _asMap(
+        _lookupFlexibleValue(source, container),
+      );
+      if (nested == null || nested.isEmpty) {
+        continue;
+      }
+      for (final String key in keys) {
+        final dynamic value = _lookupFlexibleValue(nested, key);
+        if (value != null) {
+          return value;
+        }
+      }
+    }
+    return null;
+  }
+
+  List<String> _resolveKundliList(
+    Map<String, dynamic> source,
+    List<String> keys, {
+    List<String> nestedContainers = const <String>[],
+  }) {
+    dynamic pickFrom(Map<String, dynamic> map) {
+      for (final String key in keys) {
+        final dynamic value = _lookupFlexibleValue(map, key);
+        if (value != null) {
+          return value;
+        }
+      }
+      return null;
+    }
+
+    dynamic picked = pickFrom(source);
+    if (picked == null) {
+      for (final String container in nestedContainers) {
+        final Map<String, dynamic>? nested = _asMap(
+          _lookupFlexibleValue(source, container),
+        );
+        if (nested == null || nested.isEmpty) {
+          continue;
+        }
+        picked = pickFrom(nested);
+        if (picked != null) {
+          break;
+        }
+      }
+    }
+
+    if (picked == null) {
+      return const <String>[];
+    }
+    if (picked is List) {
+      return picked
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
+    }
+    if (picked is String) {
+      final String raw = picked.trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return const <String>[];
+      }
+      if (raw.startsWith('[')) {
+        final List<dynamic>? decoded = _decodeJsonList(raw);
+        if (decoded != null) {
+          return decoded
+              .map((item) => item.toString().trim())
+              .where((item) => item.isNotEmpty)
+              .toList(growable: false);
+        }
+      }
+      if (raw.contains(',')) {
+        return raw
+            .split(',')
+            .map((item) => item.trim())
+            .where((item) => item.isNotEmpty)
+            .toList(growable: false);
+      }
+      return <String>[raw];
+    }
+    return <String>[picked.toString()];
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    final String normalized = value.toString().trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    return double.tryParse(normalized);
+  }
+
+  Map<String, double>? _extractElementValues(Map<String, dynamic> source) {
+    final Map<String, double> normalized = <String, double>{};
+
+    void assign(String canonical, dynamic rawValue) {
+      final double? parsed = _asDouble(rawValue);
+      if (parsed != null) {
+        normalized[canonical] = parsed;
+      }
+    }
+
+    for (final MapEntry<String, dynamic> entry in source.entries) {
+      final String rawKey = entry.key.trim().toLowerCase();
+      if (rawKey.isEmpty) {
+        continue;
+      }
+      if (entry.value is Map || entry.value is List) {
+        continue;
+      }
+
+      if (rawKey.contains('fire') || rawKey.contains('agni')) {
+        assign('Fire', entry.value);
+      } else if (rawKey.contains('earth') ||
+          rawKey.contains('prith') ||
+          rawKey.contains('bhumi')) {
+        assign('Earth', entry.value);
+      } else if (rawKey.contains('air') || rawKey.contains('vayu')) {
+        assign('Air', entry.value);
+      } else if (rawKey.contains('water') || rawKey.contains('jal')) {
+        assign('Water', entry.value);
+      }
+    }
+    return normalized.isEmpty ? null : normalized;
+  }
+
+  double? _extractElementsAverage(Map<String, dynamic> source) {
+    for (final String key in const <String>[
+      'average',
+      'Average',
+      'mean',
+      'avg',
+      'elementsAverage',
+      'overallAverage',
+    ]) {
+      final double? parsed = _asDouble(source[key]);
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+    return null;
+  }
+
+  double _calculateElementsAverage(Map<String, double> elements) {
+    if (elements.isEmpty) {
+      return 0;
+    }
+    final double sum = elements.values.fold<double>(
+      0,
+      (double prev, double item) => prev + item,
+    );
+    return sum / elements.length;
+  }
+
+  ({Map<String, double> elements, double average})?
+  _resolvePredominantElementsData(Map<String, dynamic> kundliData) {
+    final Map<String, dynamic>? elementsRoot =
+        _asMap(kundliData['elements']) ??
+        _asMap(_asMap(kundliData['predominantElements'])?['values']) ??
+        _asMap(kundliData['predominantElements']) ??
+        _asMap(kundliData['elementBalance']);
+    if (elementsRoot == null || elementsRoot.isEmpty) {
+      return null;
+    }
+
+    Map<String, double>? elements = _extractElementValues(elementsRoot);
+    if (elements == null || elements.isEmpty) {
+      for (final dynamic candidate in <dynamic>[
+        elementsRoot['Average'],
+        elementsRoot['average'],
+        elementsRoot['averageValues'],
+        elementsRoot['elementValues'],
+        elementsRoot['values'],
+      ]) {
+        final Map<String, dynamic>? nested = _asMap(candidate);
+        if (nested == null || nested.isEmpty) {
+          continue;
+        }
+        elements = _extractElementValues(nested);
+        if (elements != null && elements.isNotEmpty) {
+          break;
+        }
+      }
+    }
+    if (elements == null || elements.isEmpty) {
+      return null;
+    }
+
+    final double average =
+        _extractElementsAverage(elementsRoot) ??
+        _calculateElementsAverage(elements);
+    return (elements: elements, average: average);
+  }
+
+  String _elementLabel(String key) {
+    switch (key.trim().toLowerCase()) {
+      case 'fire':
+        return _tr('Fire', 'अग्नि');
+      case 'earth':
+        return _tr('Earth', 'पृथ्वी');
+      case 'air':
+        return _tr('Air', 'वायु');
+      case 'water':
+        return _tr('Water', 'जल');
+      default:
+        return _humanizeKey(key);
+    }
+  }
+
+  String _chartPreviewText(dynamic source) {
+    if (source == null) {
+      return '--';
+    }
+    final String? htmlContent = _extractHtmlContent(source);
+    if (htmlContent != null) {
+      final String plain = htmlContent
+          .replaceAll(
+            RegExp(
+              r'<style.*?>.*?</style>',
+              dotAll: true,
+              caseSensitive: false,
+            ),
+            ' ',
+          )
+          .replaceAll(
+            RegExp(
+              r'<script.*?>.*?</script>',
+              dotAll: true,
+              caseSensitive: false,
+            ),
+            ' ',
+          )
+          .replaceAll(
+            RegExp(r'<[^>]+>', dotAll: true, caseSensitive: false),
+            ' ',
+          )
+          .replaceAll('&nbsp;', ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (plain.isEmpty) {
+        return _tr(
+          'Chart generated successfully. HTML visualization is available.',
+          'चार्ट सफलतापूर्वक जनरेट हुआ। HTML विज़ुअल उपलब्ध है।',
+        );
+      }
+      if (plain.length > 360) {
+        return '${plain.substring(0, 360)}...';
+      }
+      return plain;
+    }
+
+    final String formatted = _formatStructuredValue(source);
+    if (formatted == '--') {
+      return '--';
+    }
+    if (formatted.length > 360) {
+      return '${formatted.substring(0, 360)}...';
+    }
+    return formatted;
+  }
+
+  String _decodeHtmlEntities(String raw) {
+    return raw
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'");
+  }
+
+  bool _looksLikeHtml(String raw) {
+    final String value = raw.trim().toLowerCase();
+    if (value.isEmpty) return false;
+    return RegExp(
+      r'<\s*(html|body|table|tr|td|th|div|span|svg|img|style|h[1-6]|p|ul|ol|li)\b',
+      caseSensitive: false,
+    ).hasMatch(value);
+  }
+
+  String _normalizeKundliHtml(String rawHtml) {
+    final String styles =
+        RegExp(
+          r'<style[^>]*>([\s\S]*?)</style>',
+          caseSensitive: false,
+        ).allMatches(rawHtml).map((m) => m.group(1) ?? '').join('\n');
+    final Match? bodyMatch = RegExp(
+      r'<body[^>]*>([\s\S]*?)</body>',
+      caseSensitive: false,
+    ).firstMatch(rawHtml);
+    final String body = bodyMatch?.group(1) ?? rawHtml;
+
+    const String forceFullWidthStyle = '''
+<style>
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+* { box-sizing: border-box; }
+svg, img, table {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+}
+</style>
+''';
+    final String styleBlock = styles.trim().isEmpty
+        ? ''
+        : '<style>$styles</style>';
+    return '$forceFullWidthStyle$styleBlock$body';
+  }
+
+  String? _extractHtmlContent(dynamic source, {int depth = 0}) {
+    if (source == null || depth > 5) {
+      return null;
+    }
+
+    if (source is String) {
+      String raw = source.trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return null;
+      }
+
+      if (raw.startsWith('{') || raw.startsWith('[')) {
+        try {
+          final dynamic decoded = jsonDecode(raw);
+          return _extractHtmlContent(decoded, depth: depth + 1);
+        } catch (_) {}
+      }
+
+      if ((raw.startsWith('"') && raw.endsWith('"')) ||
+          (raw.startsWith("'") && raw.endsWith("'"))) {
+        try {
+          final dynamic decoded = jsonDecode(raw);
+          if (decoded is String) {
+            raw = decoded.trim();
+          }
+        } catch (_) {}
+      }
+
+      final String normalized = _decodeHtmlEntities(
+        raw
+            .replaceAll(r'\n', '\n')
+            .replaceAll(r'\t', ' ')
+            .replaceAll(r'\"', '"'),
+      ).trim();
+      if (_looksLikeHtml(normalized)) {
+        return _normalizeKundliHtml(normalized);
+      }
+      return null;
+    }
+
+    if (source is Map || source is List) {
+      final Map<String, dynamic>? map = _asMap(source);
+      if (map != null) {
+        for (final String key in const <String>[
+          'html',
+          'htmlContent',
+          'content',
+          'chartHtml',
+          'reportHtml',
+          'value',
+          'data',
+          'htmlSections',
+        ]) {
+          final String? found = _extractHtmlContent(
+            _lookupFlexibleValue(map, key),
+            depth: depth + 1,
+          );
+          if (found != null) {
+            return found;
+          }
+        }
+        for (final MapEntry<String, dynamic> entry in map.entries) {
+          final String? found = _extractHtmlContent(
+            entry.value,
+            depth: depth + 1,
+          );
+          if (found != null) {
+            return found;
+          }
+        }
+        return null;
+      }
+
+      if (source is List) {
+        for (final dynamic item in source) {
+          final String? found = _extractHtmlContent(item, depth: depth + 1);
+          if (found != null) {
+            return found;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  dynamic _pickChartSource({
+    required Map<String, dynamic> kundliData,
+    required Map<String, dynamic> planetary,
+    required Map<String, dynamic> htmlSections,
+    required List<String> keys,
+  }) {
+    dynamic pickFrom(Map<String, dynamic>? source) {
+      if (source == null || source.isEmpty) {
+        return null;
+      }
+      for (final String key in keys) {
+        final dynamic value = _lookupFlexibleValue(source, key);
+        if (value != null) {
+          return value;
+        }
+      }
+      return null;
+    }
+
+    final dynamic fromHtmlSections = pickFrom(htmlSections);
+    if (fromHtmlSections != null) {
+      return fromHtmlSections;
+    }
+
+    final dynamic fromPlanetary = pickFrom(planetary);
+    if (fromPlanetary != null) {
+      return fromPlanetary;
+    }
+
+    final dynamic fromRoot = pickFrom(kundliData);
+    if (fromRoot != null) {
+      return fromRoot;
+    }
+
+    for (final String container in const <String>[
+      'charts',
+      'chartData',
+      'kundliCharts',
+      'htmlSections',
+      'report',
+      'response',
+      'result',
+    ]) {
+      final Map<String, dynamic>? nested = _asMap(
+        _lookupFlexibleValue(kundliData, container),
+      );
+      final dynamic nestedValue = pickFrom(nested);
+      if (nestedValue != null) {
+        return nestedValue;
+      }
+    }
+    return null;
+  }
+
+  List<_AdminKundliChartEntry> _resolveChartEntries(
+    Map<String, dynamic> kundliData,
+  ) {
+    final Map<String, dynamic> planetary =
+        _asMap(kundliData['planetaryPositions']) ?? <String, dynamic>{};
+    final Map<String, dynamic> htmlSections =
+        _asMap(planetary['htmlSections']) ?? <String, dynamic>{};
+
+    final List<({String label, List<String> keys, IconData icon})> sources =
+        <({String label, List<String> keys, IconData icon})>[
+          (
+            label: _tr('Birth Chart', 'जन्म कुंडली'),
+            keys: const <String>[
+              'kundliChart',
+              'birthChart',
+              'birth_chart',
+              'lagnaChart',
+              'lagnaKundli',
+            ],
+            icon: Icons.home_work_outlined,
+          ),
+          (
+            label: _tr('Navamsha Chart', 'नवांश कुंडली'),
+            keys: const <String>[
+              'navamshaChart',
+              'navamsaChart',
+              'navamsha_chart',
+              'd9Chart',
+            ],
+            icon: Icons.stars_rounded,
+          ),
+          (
+            label: _tr('Transit Chart', 'गोचर कुंडली'),
+            keys: const <String>[
+              'transitChart',
+              'transit_chart',
+              'gocharChart',
+              'gocharKundli',
+            ],
+            icon: Icons.travel_explore_rounded,
+          ),
+          (
+            label: _tr('Planetary Positions', 'ग्रह स्थिति'),
+            keys: const <String>[
+              'planetaryPositions',
+              'planetaryPosition',
+              'planetPositions',
+              'grahSthiti',
+              'htmlContent',
+            ],
+            icon: Icons.public_rounded,
+          ),
+        ];
+
+    final List<_AdminKundliChartEntry> output = <_AdminKundliChartEntry>[];
+    for (final source in sources) {
+      final dynamic rawData = _pickChartSource(
+        kundliData: kundliData,
+        planetary: planetary,
+        htmlSections: htmlSections,
+        keys: source.keys,
+      );
+      final String? htmlContent = _extractHtmlContent(rawData);
+      final String preview = _chartPreviewText(rawData);
+      if (htmlContent == null && preview == '--') {
+        continue;
+      }
+      output.add(
+        _AdminKundliChartEntry(
+          label: source.label,
+          icon: source.icon,
+          previewText: preview,
+          htmlContent: htmlContent,
+        ),
+      );
+    }
+    return output;
   }
 
   Widget _buildInfoTile({
@@ -810,6 +1389,91 @@ class _AdminUserAstroProfileScreenState
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHtmlChartTile({
+    required bool isDark,
+    required _AdminKundliChartEntry entry,
+  }) {
+    final Color textColor = isDark ? Colors.white : AdminAppTheme.ink;
+    final Color muted = isDark ? Colors.white70 : AdminAppTheme.muted;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1B1F2B) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : AdminAppTheme.royal.withValues(alpha: 0.08),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(entry.icon, size: 16, color: AdminAppTheme.gold),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  entry.label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (entry.previewText != '--') ...<Widget>[
+            const SizedBox(height: 6),
+            Text(
+              entry.previewText,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8),
+              color: isDark ? const Color(0xFF0F1219) : const Color(0xFFFAFBFF),
+              child: html.Html(
+                data: entry.htmlContent ?? '',
+                extensions: const [SvgHtmlExtension()],
+                style: <String, html.Style>{
+                  'html': html.Style(
+                    margin: html.Margins.zero,
+                    padding: html.HtmlPaddings.zero,
+                    color: textColor,
+                  ),
+                  'body': html.Style(
+                    margin: html.Margins.zero,
+                    padding: html.HtmlPaddings.zero,
+                    color: textColor,
+                    backgroundColor: isDark
+                        ? const Color(0xFF0F1219)
+                        : const Color(0xFFFAFBFF),
+                    fontSize: html.FontSize(13),
+                  ),
+                },
+              ),
             ),
           ),
         ],
@@ -904,6 +1568,16 @@ class _AdminUserAstroProfileScreenState
           'phone',
         ]) ??
         (widget.userPhone ?? '--');
+    final String headerAddress = <String>[
+      _pickFirstString(profileData, const <String>[
+            'address',
+            'fullAddress',
+            'currentAddress',
+          ]) ??
+          '',
+      _pickFirstString(profileData, const <String>['city']) ?? '',
+      _pickFirstString(profileData, const <String>['state']) ?? '',
+    ].where((item) => item.trim().isNotEmpty && item.trim() != '--').join(', ');
 
     return Scaffold(
       appBar: AppBar(
@@ -986,6 +1660,19 @@ class _AdminUserAstroProfileScreenState
                                   color: isDark
                                       ? Colors.white60
                                       : AdminAppTheme.muted,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '${_tr('Address', 'पता')}: ${headerAddress.isEmpty ? '--' : headerAddress}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: isDark
+                                      ? Colors.white60
+                                      : AdminAppTheme.muted,
+                                  height: 1.25,
                                 ),
                               ),
                             ],
@@ -1370,15 +2057,150 @@ class _AdminUserAstroProfileScreenState
         _asMap(kundliData['locationMeta']) ?? <String, dynamic>{};
     final dashaMap =
         _asMap(kundliData['vimshottariDasha']) ?? <String, dynamic>{};
-    final elementsMap = _asMap(kundliData['elements']) ?? <String, dynamic>{};
+    final predominantElementsData = _resolvePredominantElementsData(kundliData);
+    final chartEntries = _resolveChartEntries(kundliData);
     final remediesMap = _asMap(kundliData['remedies']) ?? <String, dynamic>{};
     final planets = _asMapList(kundliData['planets']);
     final housesMap = _asMap(kundliData['houses']) ?? <String, dynamic>{};
-    final List<String> auspiciousYogas = _asStringList(
-      kundliData['auspiciousYogas'],
+    final List<String> auspiciousYogas = _resolveKundliList(
+      kundliData,
+      const <String>[
+        'auspiciousYogas',
+        'auspicious_yogas',
+        'goodYogas',
+        'positiveYogas',
+        'yogas',
+      ],
+      nestedContainers: const <String>[
+        'yoga',
+        'yogas',
+        'yogaDetails',
+        'analysis',
+      ],
     );
-    final List<String> inauspiciousYogas = _asStringList(
-      kundliData['inauspiciousYogas'],
+    final List<String> inauspiciousYogas = _resolveKundliList(
+      kundliData,
+      const <String>[
+        'inauspiciousYogas',
+        'inauspicious_yogas',
+        'badYogas',
+        'negativeYogas',
+      ],
+      nestedContainers: const <String>[
+        'yoga',
+        'yogas',
+        'yogaDetails',
+        'analysis',
+      ],
+    );
+    final dynamic mangalDoshaValue = _resolveKundliValue(
+      kundliData,
+      const <String>[
+        'mangalDosha',
+        'mangal_dosha',
+        'mangalikDosha',
+        'manglikDosha',
+      ],
+      nestedContainers: const <String>[
+        'doshaAnalysis',
+        'doshas',
+        'dosha',
+        'dosh',
+        'analysis',
+      ],
+    );
+    final dynamic kaalSarpDoshaValue = _resolveKundliValue(
+      kundliData,
+      const <String>[
+        'kaalSarpDosha',
+        'kaal_sarp_dosha',
+        'kaalSarpaDosha',
+        'kalsarpDosha',
+      ],
+      nestedContainers: const <String>[
+        'doshaAnalysis',
+        'doshas',
+        'dosha',
+        'dosh',
+        'analysis',
+      ],
+    );
+    final dynamic pitruDoshaValue = _resolveKundliValue(
+      kundliData,
+      const <String>['pitruDosha', 'pitru_dosha', 'pitraDosha', 'pitrDosha'],
+      nestedContainers: const <String>[
+        'doshaAnalysis',
+        'doshas',
+        'dosha',
+        'dosh',
+        'analysis',
+      ],
+    );
+    final dynamic grahanDoshaValue = _resolveKundliValue(
+      kundliData,
+      const <String>['grahanDosha', 'grahan_dosha', 'eclipseDosha'],
+      nestedContainers: const <String>[
+        'doshaAnalysis',
+        'doshas',
+        'dosha',
+        'dosh',
+        'analysis',
+      ],
+    );
+    final dynamic nadiDoshaValue = _resolveKundliValue(
+      kundliData,
+      const <String>['nadiDosha', 'nadi_dosha'],
+      nestedContainers: const <String>[
+        'doshaAnalysis',
+        'doshas',
+        'dosha',
+        'dosh',
+        'analysis',
+      ],
+    );
+    final dynamic bhakootDoshaValue = _resolveKundliValue(
+      kundliData,
+      const <String>['bhakootDosha', 'bhakoot_dosha', 'bhakutDosha'],
+      nestedContainers: const <String>[
+        'doshaAnalysis',
+        'doshas',
+        'dosha',
+        'dosh',
+        'analysis',
+      ],
+    );
+    final dynamic shaniDoshaValue = _resolveKundliValue(
+      kundliData,
+      const <String>[
+        'shaniDosha',
+        'shani_dosha',
+        'sadeSati',
+        'sadeSatiDosha',
+        'dhaiya',
+      ],
+      nestedContainers: const <String>[
+        'doshaAnalysis',
+        'doshas',
+        'dosha',
+        'dosh',
+        'analysis',
+      ],
+    );
+    final dynamic guruChandalDoshaValue = _resolveKundliValue(
+      kundliData,
+      const <String>[
+        'guruChandalDosha',
+        'guru_chandal_dosha',
+        'guruChandalaDosha',
+        'guruChandal',
+      ],
+      nestedContainers: const <String>[
+        'doshaAnalysis',
+        'doshas',
+        'dosha',
+        'dosh',
+        'analysis',
+      ],
     );
     final List<Map<String, dynamic>> dashaTable = _asMapList(
       dashaMap['dashaTable'],
@@ -1500,6 +2322,23 @@ class _AdminUserAstroProfileScreenState
                 ),
               ],
             ),
+          if (chartEntries.isNotEmpty)
+            _buildSection(
+              isDark: isDark,
+              title: _tr('Charts & Positions', 'चार्ट और स्थिति'),
+              children: chartEntries
+                  .map(
+                    (entry) => entry.hasHtml
+                        ? _buildHtmlChartTile(isDark: isDark, entry: entry)
+                        : _buildInfoTile(
+                            isDark: isDark,
+                            label: entry.label,
+                            value: entry.previewText,
+                            icon: entry.icon,
+                          ),
+                  )
+                  .toList(),
+            ),
           _buildSection(
             isDark: isDark,
             title: _tr('Dosha Analysis', 'दोष विश्लेषण'),
@@ -1507,26 +2346,53 @@ class _AdminUserAstroProfileScreenState
               _buildInfoTile(
                 isDark: isDark,
                 label: _tr('Mangal Dosha', 'मांगलिक दोष'),
-                value: _formatDoshaValue(kundliData['mangalDosha']),
+                value: _formatDoshaValue(mangalDoshaValue),
                 icon: Icons.bolt_outlined,
               ),
               _buildInfoTile(
                 isDark: isDark,
                 label: _tr('Kaal Sarp Dosha', 'काल सर्प दोष'),
-                value: _formatDoshaValue(kundliData['kaalSarpDosha']),
+                value: _formatDoshaValue(kaalSarpDoshaValue),
                 icon: Icons.waves_outlined,
               ),
               _buildInfoTile(
                 isDark: isDark,
                 label: _tr('Pitru Dosha', 'पितृ दोष'),
-                value: _formatDoshaValue(kundliData['pitruDosha']),
+                value: _formatDoshaValue(pitruDoshaValue),
                 icon: Icons.family_restroom_outlined,
               ),
               _buildInfoTile(
                 isDark: isDark,
+                label: _tr('Nadi Dosha', 'नाड़ी दोष'),
+                value: _formatDoshaValue(nadiDoshaValue),
+                icon: Icons.bloodtype_outlined,
+              ),
+              _buildInfoTile(
+                isDark: isDark,
+                label: _tr('Bhakoot Dosha', 'भकूट दोष'),
+                value: _formatDoshaValue(bhakootDoshaValue),
+                icon: Icons.compare_arrows_rounded,
+              ),
+              _buildInfoTile(
+                isDark: isDark,
                 label: _tr('Grahan Dosha', 'ग्रहण दोष'),
-                value: _formatDoshaValue(kundliData['grahanDosha']),
+                value: _formatDoshaValue(grahanDoshaValue),
                 icon: Icons.dark_mode_outlined,
+              ),
+              _buildInfoTile(
+                isDark: isDark,
+                label: _tr(
+                  'Shani Dosha / Sade Sati / Dhaiya',
+                  'शनि दोष / साढ़ेसाती / ढैया',
+                ),
+                value: _formatDoshaValue(shaniDoshaValue),
+                icon: Icons.nights_stay_outlined,
+              ),
+              _buildInfoTile(
+                isDark: isDark,
+                label: _tr('Guru Chandal Dosha', 'गुरु चांडाल दोष'),
+                value: _formatDoshaValue(guruChandalDoshaValue),
+                icon: Icons.school_outlined,
               ),
             ],
           ),
@@ -1658,7 +2524,7 @@ class _AdminUserAstroProfileScreenState
                 ),
               ],
             ),
-          if (elementsMap.isNotEmpty)
+          if (predominantElementsData != null)
             _buildSection(
               isDark: isDark,
               title: _tr('Predominant Elements', 'प्रधान तत्व'),
@@ -1666,13 +2532,19 @@ class _AdminUserAstroProfileScreenState
                 _buildInfoTile(
                   isDark: isDark,
                   label: _tr('Element Balance', 'तत्व संतुलन'),
-                  value: elementsMap.entries
+                  value: predominantElementsData.elements.entries
                       .map(
                         (entry) =>
-                            '• ${_humanizeKey(entry.key)}: ${_formatValue(entry.value)}',
+                            '• ${_elementLabel(entry.key)}: ${entry.value.toStringAsFixed(2)}',
                       )
                       .join('\n'),
                   icon: Icons.pie_chart_outline_rounded,
+                ),
+                _buildInfoTile(
+                  isDark: isDark,
+                  label: _tr('Average', 'औसत'),
+                  value: predominantElementsData.average.toStringAsFixed(2),
+                  icon: Icons.show_chart_rounded,
                 ),
               ],
             ),

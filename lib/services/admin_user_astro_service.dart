@@ -174,7 +174,17 @@ class AdminUserAstroService {
     if (raw == null) {
       return null;
     }
-    final value = raw.trim();
+    String value = raw.trim();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    if (value.contains('T')) {
+      value = value.split('T').first.trim();
+    }
+    if (value.contains(' ')) {
+      value = value.split(' ').first.trim();
+    }
     if (value.isEmpty) {
       return null;
     }
@@ -198,21 +208,48 @@ class AdminUserAstroService {
       return '$year-$month-$day';
     }
 
-    return value;
+    final fallbackDate = DateTime.tryParse(value);
+    if (fallbackDate != null) {
+      final year = fallbackDate.year.toString().padLeft(4, '0');
+      final month = fallbackDate.month.toString().padLeft(2, '0');
+      final day = fallbackDate.day.toString().padLeft(2, '0');
+      return '$year-$month-$day';
+    }
+
+    return value.trim();
   }
 
   String? _normalizeTime(String? raw, {String? amPm}) {
     if (raw == null) {
       return null;
     }
-    final value = raw.trim();
+    String value = raw.trim();
     if (value.isEmpty) {
       return null;
+    }
+
+    if (value.contains('T')) {
+      value = value.split('T').last.trim();
+    }
+    if (value.contains(' ')) {
+      final parts = value.split(RegExp(r'\s+'));
+      if (parts.length >= 2 &&
+          (parts[1].toUpperCase() == 'AM' || parts[1].toUpperCase() == 'PM')) {
+        value = '${parts[0]} ${parts[1].toUpperCase()}';
+      } else {
+        value = parts.first;
+      }
     }
 
     final upper = value.toUpperCase();
     if (upper.endsWith('AM') || upper.endsWith('PM')) {
       return value;
+    }
+
+    final hhmmss = RegExp(r'^(\d{1,2}):(\d{2})(?::\d{2})$');
+    final hhmmssMatch = hhmmss.firstMatch(value);
+    if (hhmmssMatch != null) {
+      value = '${hhmmssMatch.group(1)}:${hhmmssMatch.group(2)}';
     }
 
     final suffix = amPm?.trim().toUpperCase() ?? '';

@@ -20,6 +20,7 @@ class ApiClient {
   );
 
   String? _token;
+  bool _didLogHeadersReady = false;
 
   Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -76,6 +77,9 @@ class ApiClient {
     } else {
       _dio.options.headers.remove('Authorization');
     }
-    debugPrint('[AstroAdmin API] Headers ready for ${_dio.options.baseUrl}');
+    if (!_didLogHeadersReady) {
+      debugPrint('[AstroAdmin API] Headers ready for ${_dio.options.baseUrl}');
+      _didLogHeadersReady = true;
+    }
   }
 }

@@ -379,12 +379,6 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
   final ChatPushService _chatPushService = ChatPushService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<AdminMessage> _fallbackMessages = <AdminMessage>[];
-  final Set<String> _fallbackSignatures = <String>{};
-  Timer? _fallbackSessionPollTimer;
-  String? _lastSessionSnapshotSignature;
-  String _lastLocalSentText = '';
-  DateTime? _lastLocalSentAt;
   String _adminName = 'Admin';
   int _adminUserId = 1;
   bool _sending = false;
@@ -394,11 +388,9 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _seedFallbackFromChatSummary();
     _loadProfile();
     // Don't let read-sync failures block opening the chat screen.
     _chatService.markMessagesAsRead(widget.chat.chatId);
-    _startFallbackSessionSync();
   }
 
   Future<void> _loadProfile() async {
@@ -418,139 +410,6 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
 
   Future<int> _readCurrentUserId() async {
     return (await SharedPreferences.getInstance()).getInt('userId') ?? 1;
-  }
-
-  void _seedFallbackFromChatSummary() {
-    final String summary = widget.chat.lastMessage.trim();
-    if (summary.isEmpty) return;
-    final DateTime timestamp = widget.chat.lastMessageTime;
-    final String signature = _messageSignature(
-      senderRole: 'user',
-      content: summary,
-      timestamp: timestamp,
-    );
-    _fallbackSignatures.add(signature);
-    _fallbackMessages.add(
-      _buildFallbackMessage(
-        senderRole: 'user',
-        senderName: widget.chat.userName,
-        content: summary,
-        timestamp: timestamp,
-        signature: signature,
-      ),
-    );
-    _lastSessionSnapshotSignature = signature;
-  }
-
-  void _startFallbackSessionSync() {
-    _fallbackSessionPollTimer?.cancel();
-    _syncFallbackFromSession();
-    _fallbackSessionPollTimer = Timer.periodic(
-      const Duration(seconds: 3),
-      (_) => _syncFallbackFromSession(),
-    );
-  }
-
-  Future<void> _syncFallbackFromSession() async {
-    try {
-      final AdminChatSession session = await _chatService.getChatSession(
-        widget.chat.chatId,
-      );
-      final String content = session.lastMessage.trim();
-      if (content.isEmpty) return;
-
-      final DateTime timestamp = session.lastMessageTime;
-      final bool looksLikeLocalAdminMessage =
-          _lastLocalSentText.isNotEmpty &&
-          _lastLocalSentText == content &&
-          _lastLocalSentAt != null &&
-          DateTime.now().difference(_lastLocalSentAt!).inSeconds <= 25;
-
-      final String senderRole = looksLikeLocalAdminMessage ? 'admin' : 'user';
-      final String senderName = looksLikeLocalAdminMessage
-          ? _adminName
-          : widget.chat.userName;
-
-      final String signature = _messageSignature(
-        senderRole: senderRole,
-        content: content,
-        timestamp: timestamp,
-      );
-      if (_lastSessionSnapshotSignature == signature) return;
-      _lastSessionSnapshotSignature = signature;
-      if (_fallbackSignatures.contains(signature)) return;
-
-      _fallbackSignatures.add(signature);
-      _fallbackMessages.add(
-        _buildFallbackMessage(
-          senderRole: senderRole,
-          senderName: senderName,
-          content: content,
-          timestamp: timestamp,
-          signature: signature,
-        ),
-      );
-      _fallbackMessages.sort(
-        (AdminMessage a, AdminMessage b) => a.timestamp.compareTo(b.timestamp),
-      );
-      if (senderRole == 'user') {
-        _chatService.markMessagesAsRead(widget.chat.chatId);
-      }
-      if (!mounted) return;
-      setState(() {});
-    } catch (_) {
-      // Non-blocking fallback sync.
-    }
-  }
-
-  String _messageSignature({
-    required String senderRole,
-    required String content,
-    required DateTime timestamp,
-  }) {
-    final normalizedContent = content.trim();
-    return '$senderRole|$normalizedContent|${timestamp.millisecondsSinceEpoch}';
-  }
-
-  AdminMessage _buildFallbackMessage({
-    required String senderRole,
-    required String senderName,
-    required String content,
-    required DateTime timestamp,
-    required String signature,
-  }) {
-    return AdminMessage(
-      id: 'fallback_$signature',
-      chatId: widget.chat.chatId,
-      senderId: senderRole == 'admin' ? _adminUserId : widget.chat.userId,
-      senderName: senderName,
-      senderRole: senderRole,
-      messageType: 'text',
-      content: content,
-      timestamp: timestamp,
-      isRead: senderRole == 'admin',
-    );
-  }
-
-  List<AdminMessage> _resolveRenderableMessages(List<AdminMessage> streamData) {
-    final List<AdminMessage> merged = <AdminMessage>[
-      ...streamData,
-      ..._fallbackMessages,
-    ];
-    final Map<String, AdminMessage> bySignature = <String, AdminMessage>{};
-    for (final AdminMessage message in merged) {
-      final String signature = _messageSignature(
-        senderRole: message.senderRole,
-        content: message.content,
-        timestamp: message.timestamp,
-      );
-      bySignature[signature] = message;
-    }
-    final List<AdminMessage> output = bySignature.values.toList()
-      ..sort((AdminMessage a, AdminMessage b) {
-        return a.timestamp.compareTo(b.timestamp);
-      });
-    return output;
   }
 
   bool get _isHindi => AppPreferences.isHindiNotifier.value;
@@ -574,6 +433,7 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
   Future<void> _notifyUser({
     required String messageType,
     required String content,
+    Map<String, dynamic>? actionData,
   }) async {
     await _chatPushService.sendChatNotificationToUser(
       recipientUserId: widget.chat.userId,
@@ -582,13 +442,37 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
       messageType: messageType,
       content: content,
       notificationType: 'SESSION',
-      actionData: <String, dynamic>{
-        'source': 'chat',
-        'chatId': widget.chat.chatId,
-        'targetRole': 'user',
-        'callerName': _adminName,
-      },
+      actionData:
+          actionData ??
+          <String, dynamic>{
+            'source': 'chat',
+            'chatId': widget.chat.chatId,
+            'targetRole': 'user',
+            'callerName': _adminName,
+          },
     );
+  }
+
+  Map<String, dynamic> _buildChatActionData(AdminMessage message) {
+    return <String, dynamic>{
+      'source': 'chat',
+      'targetRole': 'user',
+      'chatId': message.chatId,
+      'id': message.id,
+      'senderId': message.senderId,
+      'senderName': message.senderName,
+      'senderRole': message.senderRole,
+      'messageType': message.messageType,
+      'content': message.content,
+      'timestamp': message.timestamp.toIso8601String(),
+      if ((message.mediaUrl ?? '').trim().isNotEmpty)
+        'mediaUrl': message.mediaUrl,
+      if ((message.fileName ?? '').trim().isNotEmpty)
+        'fileName': message.fileName,
+      if ((message.fileSize ?? 0) > 0) 'fileSize': message.fileSize,
+      if ((message.mediaDuration ?? 0) > 0)
+        'mediaDuration': message.mediaDuration,
+    };
   }
 
   Future<void> _send() async {
@@ -596,17 +480,19 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
     if (text.isEmpty || _sending) {
       return;
     }
-    _lastLocalSentText = text;
-    _lastLocalSentAt = DateTime.now();
     setState(() => _sending = true);
     try {
-      await _chatService.sendTextMessage(
+      final sentMessage = await _chatService.sendTextMessage(
         chatId: widget.chat.chatId,
         content: text,
         senderName: _adminName,
         senderId: _adminUserId,
       );
-      await _notifyUser(messageType: 'text', content: text);
+      await _notifyUser(
+        messageType: 'text',
+        content: text,
+        actionData: _buildChatActionData(sentMessage),
+      );
       _messageController.clear();
       _chatService.markMessagesAsRead(widget.chat.chatId);
     } catch (e) {
@@ -710,7 +596,6 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
 
   @override
   void dispose() {
-    _fallbackSessionPollTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -856,9 +741,7 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
                         );
                       }
                       final List<AdminMessage> messages =
-                          _resolveRenderableMessages(
-                            snapshot.data ?? <AdminMessage>[],
-                          );
+                          snapshot.data ?? <AdminMessage>[];
                       if (messages.isEmpty) {
                         return _StateMessage(
                           icon: Icons.chat_bubble_outline_rounded,

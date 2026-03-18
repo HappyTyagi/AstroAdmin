@@ -15,6 +15,7 @@ import '../services/app_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/chat_push_service.dart';
 import '../services/puja_call_service.dart';
+import '../services/push_notification_bootstrap_service.dart';
 import '../theme/app_theme.dart';
 import 'admin_user_astro_profile_screen.dart';
 import 'puja_video_call_screen.dart';
@@ -37,6 +38,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   void initState() {
     super.initState();
     AppPreferences.isHindiNotifier.addListener(_onLanguageChanged);
+    PushNotificationBootstrapService.syncPendingChatNotifications();
   }
 
   @override
@@ -389,6 +391,7 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
   void initState() {
     super.initState();
     _loadProfile();
+    PushNotificationBootstrapService.syncPendingChatNotifications();
     // Don't let read-sync failures block opening the chat screen.
     _chatService.markMessagesAsRead(widget.chat.chatId);
   }

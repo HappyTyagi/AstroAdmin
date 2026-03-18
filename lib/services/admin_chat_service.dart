@@ -14,6 +14,11 @@ import 'api_config.dart';
 class AdminChatService {
   static const int adminUserId = 1;
   static const Duration _chatListPollInterval = Duration(seconds: 4);
+  static final AdminChatService _instance = AdminChatService._internal();
+
+  factory AdminChatService() => _instance;
+
+  AdminChatService._internal();
 
   final ApiClient _client = ApiClient();
   final Map<String, StreamController<List<AdminMessage>>> _messageControllers =

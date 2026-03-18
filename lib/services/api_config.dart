@@ -35,6 +35,8 @@ class ApiConfig {
   static const String agoraRtcToken = '/api/mobile/call/agora-token';
   static const String sendNotification = '/notification/send';
   static const String sendNotificationByMobile = '/notification/send-by-mobile';
+  static const String chatPendingNotifications = '/notification/chat/pending';
+  static const String chatAckNotifications = '/notification/chat/ack';
 
   static Map<String, String> get headers => <String, String>{
     'Content-Type': 'application/json',

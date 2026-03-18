@@ -6,11 +6,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/support_call_screen.dart';
 import 'admin_chat_service.dart';
+import 'api_client.dart';
+import 'api_config.dart';
 
 class PushNotificationBootstrapService {
   static bool _initialized = false;
   static GlobalKey<NavigatorState>? _navigatorKey;
   static final Set<String> _openedCallIds = <String>{};
+  static final ApiClient _client = ApiClient();
 
   static bool _isChatPushForAdmin(Map<String, dynamic>? actionData) {
     if (actionData == null) return false;
@@ -57,6 +60,8 @@ class PushNotificationBootstrapService {
     if (initialMessage != null) {
       await _handleMessage(initialMessage);
     }
+
+    await _syncPendingChatNotificationsFromServer();
   }
 
   static Future<void> handleBackgroundPush(RemoteMessage message) async {
@@ -85,29 +90,99 @@ class PushNotificationBootstrapService {
     }
   }
 
+  static Future<void> syncPendingChatNotifications() async {
+    await _syncPendingChatNotificationsFromServer();
+  }
+
+  static Future<void> _syncPendingChatNotificationsFromServer() async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final int userId = prefs.getInt('userId') ?? 0;
+      if (userId <= 0) {
+        return;
+      }
+
+      final response = await _client.get(
+        ApiConfig.chatPendingNotifications,
+        queryParameters: <String, dynamic>{'userId': userId, 'limit': 120},
+      );
+
+      final Map<String, dynamic> data = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+      final List<dynamic> items =
+          data['items'] as List<dynamic>? ?? <dynamic>[];
+      if (items.isEmpty) {
+        return;
+      }
+
+      final List<int> ackIds = <int>[];
+      for (final dynamic entry in items) {
+        if (entry is! Map) continue;
+        final Map<String, dynamic> row = Map<String, dynamic>.from(entry);
+        final Map<String, dynamic>? actionData = _extractActionData(row);
+        if (!_isChatPushForAdmin(actionData) || actionData == null) {
+          continue;
+        }
+        _ingestChatMessagePayload(
+          actionData: actionData,
+          title: (row['title'] ?? '').toString().trim(),
+          body: (row['message'] ?? '').toString().trim(),
+        );
+        final int? id = int.tryParse((row['id'] ?? '').toString().trim());
+        if (id != null && id > 0) {
+          ackIds.add(id);
+        }
+      }
+
+      if (ackIds.isEmpty) {
+        return;
+      }
+
+      await _client.post(
+        ApiConfig.chatAckNotifications,
+        data: <String, dynamic>{'userId': userId, 'ids': ackIds},
+      );
+    } catch (e) {
+      debugPrint('[AdminPush] pending chat sync failed: $e');
+    }
+  }
+
   static void _ingestChatMessage(
     RemoteMessage message,
     Map<String, dynamic> actionData,
   ) {
+    _ingestChatMessagePayload(
+      actionData: actionData,
+      title: (message.notification?.title ?? message.data['title'] ?? '')
+          .toString()
+          .trim(),
+      body:
+          (message.notification?.body ??
+                  message.data['message'] ??
+                  message.data['body'] ??
+                  '')
+              .toString()
+              .trim(),
+    );
+  }
+
+  static void _ingestChatMessagePayload({
+    required Map<String, dynamic> actionData,
+    String? title,
+    String? body,
+  }) {
     final String chatId = (actionData['chatId'] ?? '').toString().trim();
     if (chatId.isEmpty) {
       return;
     }
 
-    final String senderName =
-        (actionData['senderName'] ??
-                message.notification?.title ??
-                message.data['title'] ??
-                'User')
-            .toString()
-            .trim();
-    final String content =
-        (actionData['content'] ??
-                message.notification?.body ??
-                message.data['message'] ??
-                'New message')
-            .toString()
-            .trim();
+    final String senderName = (actionData['senderName'] ?? title ?? 'User')
+        .toString()
+        .trim();
+    final String content = (actionData['content'] ?? body ?? 'New message')
+        .toString()
+        .trim();
     final String id =
         (actionData['id'] ??
                 actionData['messageId'] ??

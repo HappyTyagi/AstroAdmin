@@ -100,9 +100,10 @@ END
     final int updatedAt = DateTime.now().millisecondsSinceEpoch;
 
     for (final AdminMessage message in messages) {
+      final String normalizedMessageId = _normalizeMessageId(message);
       batch.insert(_tableName, <String, Object?>{
         'chat_id': chatId,
-        'message_id': message.id,
+        'message_id': normalizedMessageId,
         'sender_id': message.senderId,
         'sender_name': message.senderName,
         'sender_role': message.senderRole,
@@ -124,7 +125,7 @@ END
 
   Future<List<AdminMessage>> getMessages(
     String chatId, {
-    int limit = 500,
+    int limit = 2000,
   }) async {
     if (chatId.trim().isEmpty) {
       return const <AdminMessage>[];
@@ -135,11 +136,11 @@ END
       _tableName,
       where: 'chat_id = ?',
       whereArgs: <Object?>[chatId],
-      orderBy: 'timestamp_epoch ASC, id ASC',
+      orderBy: 'timestamp_epoch DESC, id DESC',
       limit: limit,
     );
-
-    return rows.map(_rowToMessage).toList(growable: false);
+    final List<AdminMessage> list = rows.map(_rowToMessage).toList();
+    return list.reversed.toList(growable: false);
   }
 
   AdminMessage _rowToMessage(Map<String, Object?> row) {
@@ -159,5 +160,14 @@ END
       'timestamp': (row['timestamp'] ?? '').toString(),
       'isRead': (row['is_read'] ?? 0) == 1,
     });
+  }
+
+  String _normalizeMessageId(AdminMessage message) {
+    final String raw = message.id.trim();
+    if (raw.isNotEmpty) {
+      return raw;
+    }
+    final int contentHash = message.content.hashCode.abs();
+    return 'local_${message.senderRole}_${message.senderId}_${message.timestamp.millisecondsSinceEpoch}_$contentHash';
   }
 }

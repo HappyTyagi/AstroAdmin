@@ -29,6 +29,7 @@ class AdminChatService {
   final Map<String, String> _channelToChatId = <String, String>{};
   final Map<String, AdminChatSession> _chatSessionsById =
       <String, AdminChatSession>{};
+  final List<AdminChatSession> _cachedAdminChats = <AdminChatSession>[];
   final Map<String, Future<void>> _historyLoads = <String, Future<void>>{};
   final Random _random = Random();
   final AdminChatLocalDb _localDb = AdminChatLocalDb();
@@ -672,8 +673,17 @@ class AdminChatService {
 
   Stream<List<AdminChatSession>> getAllChatsForAdmin() async* {
     while (true) {
-      final List<AdminChatSession> chats = await _fetchAdminChats();
-      yield chats;
+      try {
+        final List<AdminChatSession> chats = await _fetchAdminChats();
+        yield List<AdminChatSession>.unmodifiable(chats);
+      } catch (error) {
+        debugPrint('[AdminChat] getAllChatsForAdmin poll failed: $error');
+        if (_cachedAdminChats.isNotEmpty) {
+          yield List<AdminChatSession>.unmodifiable(_cachedAdminChats);
+        } else {
+          yield const <AdminChatSession>[];
+        }
+      }
       await Future<void>.delayed(_chatListPollInterval);
     }
   }
@@ -687,11 +697,15 @@ class AdminChatService {
     );
     final List<dynamic> items =
         data['sessions'] as List<dynamic>? ?? <dynamic>[];
-    return items.map((dynamic item) {
+    final List<AdminChatSession> chats = items.map((dynamic item) {
       final Map<String, dynamic> row = Map<String, dynamic>.from(item as Map);
       _cacheChatSessionFromMap(row);
       return AdminChatSession.fromJson(row);
     }).toList();
+    _cachedAdminChats
+      ..clear()
+      ..addAll(chats);
+    return chats;
   }
 
   Stream<List<AdminMessage>> getMessagesStream(String chatId) {
@@ -713,8 +727,11 @@ class AdminChatService {
           if (_isRtmUnavailableError(error)) {
             return;
           }
+          debugPrint('[AdminChat] history load failed for $chatId: $error');
+          final List<AdminMessage> fallback =
+              _messageCache[chatId] ?? <AdminMessage>[];
           if (!controller.isClosed) {
-            controller.addError(error);
+            controller.add(List<AdminMessage>.unmodifiable(fallback));
           }
         }
       });
@@ -735,8 +752,14 @@ class AdminChatService {
             }
             return;
           }
+          debugPrint('[AdminChat] history load failed for $chatId: $error');
+          if (!_messageCache.containsKey(chatId)) {
+            _messageCache[chatId] = <AdminMessage>[];
+          }
           if (!controller.isClosed) {
-            controller.addError(error);
+            controller.add(
+              List<AdminMessage>.unmodifiable(_messageCache[chatId]!),
+            );
           }
         }
       });

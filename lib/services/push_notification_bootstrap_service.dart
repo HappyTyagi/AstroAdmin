@@ -14,6 +14,7 @@ class PushNotificationBootstrapService {
   static GlobalKey<NavigatorState>? _navigatorKey;
   static final Set<String> _openedCallIds = <String>{};
   static final ApiClient _client = ApiClient();
+  static String? _activeChatId;
 
   static bool _isChatPushForAdmin(Map<String, dynamic>? actionData) {
     if (actionData == null) return false;
@@ -29,6 +30,28 @@ class PushNotificationBootstrapService {
         .toLowerCase();
     if (targetRole.isEmpty) return true;
     return targetRole == 'admin';
+  }
+
+  static bool _isActiveChat(String chatId) {
+    final active = (_activeChatId ?? '').trim();
+    if (active.isEmpty) {
+      return false;
+    }
+    return active == chatId.trim();
+  }
+
+  static Future<void> setActiveChatId(String? chatId) async {
+    final String normalized = (chatId ?? '').trim();
+    _activeChatId = normalized.isEmpty ? null : normalized;
+    try {
+      final bool chatOpen = _activeChatId != null;
+      await FirebaseMessaging.instance
+          .setForegroundNotificationPresentationOptions(
+            alert: !chatOpen,
+            badge: true,
+            sound: !chatOpen,
+          );
+    } catch (_) {}
   }
 
   static Future<void> initialize({
@@ -86,6 +109,10 @@ class PushNotificationBootstrapService {
 
     if (_isChatPushForAdmin(actionData)) {
       _ingestChatMessage(message, actionData);
+      final String chatId = (actionData['chatId'] ?? '').toString().trim();
+      if (chatId.isNotEmpty && _isActiveChat(chatId)) {
+        return;
+      }
       _navigatorKey?.currentState?.pushNamed('/home');
     }
   }

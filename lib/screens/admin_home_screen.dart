@@ -192,7 +192,7 @@ class _AllChatsTabState extends State<_AllChatsTab> {
                       icon: Icons.error_outline_rounded,
                       title: 'Unable to load chats',
                       subtitle:
-                          'Please check Firebase connection and try again.',
+                          'Please check server/network connection and try again.',
                     ),
                   ],
                 ),
@@ -386,12 +386,17 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
   bool _sending = false;
   bool _startingAudioCall = false;
   bool _startingVideoCall = false;
+  Timer? _pendingSyncTimer;
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    PushNotificationBootstrapService.setActiveChatId(widget.chat.chatId);
     PushNotificationBootstrapService.syncPendingChatNotifications();
+    _pendingSyncTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      PushNotificationBootstrapService.syncPendingChatNotifications();
+    });
     // Don't let read-sync failures block opening the chat screen.
     _chatService.markMessagesAsRead(widget.chat.chatId);
   }
@@ -599,6 +604,8 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
 
   @override
   void dispose() {
+    _pendingSyncTimer?.cancel();
+    PushNotificationBootstrapService.setActiveChatId(null);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -831,6 +838,19 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
     required bool isAdmin,
     required bool isDark,
   }) {
+    final String senderName = (() {
+      final String raw = message.senderName.trim();
+      if (raw.isNotEmpty) {
+        return raw;
+      }
+      if (isAdmin) {
+        final String adminLabel = _adminName.trim();
+        return adminLabel.isNotEmpty ? adminLabel : _tr('Admin', 'एडमिन');
+      }
+      final String userLabel = widget.chat.userName.trim();
+      return userLabel.isNotEmpty ? userLabel : _tr('User', 'यूज़र');
+    })();
+
     final Color bubbleColor = isAdmin
         ? (isDark ? const Color(0xFF2A2E3B) : AdminAppTheme.cream)
         : (isDark ? const Color(0xFF1B1F2B) : Colors.white);
@@ -857,7 +877,7 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              message.senderName,
+              senderName,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,

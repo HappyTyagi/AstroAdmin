@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter/services.dart';
 
 import 'firebase_options.dart';
 import 'screens/admin_home_screen.dart';
@@ -13,6 +14,13 @@ import 'services/push_token_sync_service.dart';
 import 'theme/app_theme.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+SystemUiOverlayStyle _statusBarOverlayStyle(bool isDark) {
+  return SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+    statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+  );
+}
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -63,17 +71,21 @@ class AstroAdminApp extends StatelessWidget {
           darkTheme: AdminAppTheme.darkTheme,
           themeMode: themeMode,
           builder: (context, child) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
             final mediaQuery = MediaQuery.of(context);
             final width = mediaQuery.size.width;
             final isTablet = width >= 600;
             final maxWidth = isTablet ? 900.0 : width;
-            return MediaQuery(
-              data: mediaQuery,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxWidth),
-                  child: child ?? const SizedBox.shrink(),
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: _statusBarOverlayStyle(isDark),
+              child: MediaQuery(
+                data: mediaQuery,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxWidth),
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class AdminAppTheme {
   static const String fontFamily = 'Calibri';
@@ -25,7 +26,7 @@ class AdminAppTheme {
     );
 
     return base.copyWith(
-      scaffoldBackgroundColor: cream,
+      scaffoldBackgroundColor: const Color(0xFFF7F4EA),
       colorScheme: scheme,
       textTheme: base.textTheme.apply(
         fontFamily: fontFamily,
@@ -36,6 +37,11 @@ class AdminAppTheme {
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         foregroundColor: ink,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+        ),
         elevation: 0,
         centerTitle: false,
         iconTheme: IconThemeData(color: primaryIndigo),
@@ -54,6 +60,21 @@ class AdminAppTheme {
         }),
         labelTextStyle: WidgetStateProperty.all(
           const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+        ),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: gold,
+        selectedItemColor: primaryIndigo,
+        unselectedItemColor: Colors.white,
+        selectedLabelStyle: TextStyle(
+          fontFamily: fontFamily,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelStyle: TextStyle(
+          fontFamily: fontFamily,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
         ),
       ),
       cardTheme: CardThemeData(
@@ -168,7 +189,7 @@ class AdminAppTheme {
     );
 
     return base.copyWith(
-      scaffoldBackgroundColor: const Color(0xFF0F1219),
+      scaffoldBackgroundColor: const Color(0xFF081127),
       colorScheme: scheme,
       textTheme: base.textTheme.apply(
         fontFamily: fontFamily,
@@ -179,6 +200,11 @@ class AdminAppTheme {
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         foregroundColor: Colors.white,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
         elevation: 0,
         centerTitle: false,
         iconTheme: IconThemeData(color: gold),
@@ -197,6 +223,21 @@ class AdminAppTheme {
         }),
         labelTextStyle: WidgetStateProperty.all(
           const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+        ),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Color(0xFF171A24),
+        selectedItemColor: gold,
+        unselectedItemColor: Color(0xFFB8A26A),
+        selectedLabelStyle: TextStyle(
+          fontFamily: fontFamily,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelStyle: TextStyle(
+          fontFamily: fontFamily,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
         ),
       ),
       cardTheme: CardThemeData(
@@ -356,9 +397,9 @@ class AdminAppTheme {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: <Color>[
-            Color(0xFF0F1219),
-            Color(0xFF161A26),
-            Color(0xFF10131C),
+            Color(0xFF081127),
+            Color(0xFF121A39),
+            Color(0xFF1A2145),
           ],
         ),
       );
@@ -367,7 +408,11 @@ class AdminAppTheme {
       gradient: LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: <Color>[Color(0xFFFFFBF3), Color(0xFFF7F1FF), cream],
+        colors: <Color>[
+          Color(0xFFF2E7C7),
+          Color(0xFFF7F4EA),
+          Color(0xFFF8F7F2),
+        ],
       ),
     );
   }

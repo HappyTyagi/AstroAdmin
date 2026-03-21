@@ -50,9 +50,8 @@ class AdminChatService {
   Future<Map<String, dynamic>> _readAuthContext() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final int userId = prefs.getInt('userId') ?? 0;
-    final String role = (prefs.getString('role') ?? 'USER')
-        .trim()
-        .toUpperCase();
+    final String role =
+        (prefs.getString('role') ?? 'USER').trim().toUpperCase();
     final String name = (prefs.getString('name') ?? '').trim();
     final String mobileNo = (prefs.getString('mobileNo') ?? '').trim();
     final String avatar = (prefs.getString('profileImageUrl') ?? '').trim();
@@ -164,9 +163,8 @@ class AdminChatService {
     );
     final String appId = (data['appId'] ?? '').toString().trim();
     final String token = (data['token'] ?? '').toString();
-    final String rtmUserId = (data['rtmUserId'] ?? desiredRtmUserId)
-        .toString()
-        .trim();
+    final String rtmUserId =
+        (data['rtmUserId'] ?? desiredRtmUserId).toString().trim();
     debugPrint(
       '[AdminChat][RTM] token response: desired=$desiredRtmUserId, actual=$rtmUserId, appIdLen=${appId.length}, tokenLen=${token.length}',
     );
@@ -422,8 +420,7 @@ class AdminChatService {
       return matched;
     }
 
-    final int adminIdFromRtm =
-        int.tryParse(
+    final int adminIdFromRtm = int.tryParse(
           RegExp(r'^admin_(\d+)$').firstMatch(_rtmUserId ?? '')?.group(1) ?? '',
         ) ??
         adminUserId;
@@ -436,9 +433,8 @@ class AdminChatService {
     String? channelName,
   }) {
     final Map<String, dynamic> normalized = <String, dynamic>{...payload};
-    final String existingChatId = (normalized['chatId'] ?? '')
-        .toString()
-        .trim();
+    final String existingChatId =
+        (normalized['chatId'] ?? '').toString().trim();
     if (existingChatId.isNotEmpty) {
       _channelToChatId[_channelNameForChatId(existingChatId)] = existingChatId;
       return normalized;
@@ -603,13 +599,12 @@ class AdminChatService {
             _applyHistory(chatId, channelName, <HistoryMessage>[]);
             return;
           }
-          final (RtmStatus retryStatus, retryResult) = await _rtmClient!
-              .getHistory()
-              .getMessages(
-                channelName,
-                RtmChannelType.message,
-                messageCount: 200,
-              );
+          final (RtmStatus retryStatus, retryResult) =
+              await _rtmClient!.getHistory().getMessages(
+                    channelName,
+                    RtmChannelType.message,
+                    messageCount: 200,
+                  );
           if (retryStatus.error) {
             throw Exception(
               'Failed to load chat history: ${retryStatus.reason}',
@@ -688,6 +683,71 @@ class AdminChatService {
     }
   }
 
+  String _normalizePhoneKey(String? phone) {
+    final String digitsOnly = (phone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitsOnly.isEmpty) {
+      return '';
+    }
+    if (digitsOnly.length > 10) {
+      return digitsOnly.substring(digitsOnly.length - 10);
+    }
+    return digitsOnly;
+  }
+
+  String _conversationKey(AdminChatSession chat) {
+    final String normalizedPhone = _normalizePhoneKey(chat.userPhone);
+    if (normalizedPhone.isNotEmpty) {
+      return 'phone:$normalizedPhone';
+    }
+    if (chat.userId > 0) {
+      return 'user:${chat.userId}';
+    }
+    return 'chat:${chat.chatId.trim()}';
+  }
+
+  bool _shouldReplaceChatSession(
+    AdminChatSession candidate,
+    AdminChatSession existing,
+  ) {
+    final int byTime = candidate.lastMessageTime.compareTo(
+      existing.lastMessageTime,
+    );
+    if (byTime > 0) {
+      return true;
+    }
+    if (byTime < 0) {
+      return false;
+    }
+    if (candidate.unreadCount != existing.unreadCount) {
+      return candidate.unreadCount > existing.unreadCount;
+    }
+    final bool candidateHasMessage = candidate.lastMessage.trim().isNotEmpty;
+    final bool existingHasMessage = existing.lastMessage.trim().isNotEmpty;
+    if (candidateHasMessage != existingHasMessage) {
+      return candidateHasMessage;
+    }
+    return candidate.chatId.compareTo(existing.chatId) < 0;
+  }
+
+  List<AdminChatSession> _dedupeChatsByConversation(
+    List<AdminChatSession> chats,
+  ) {
+    final Map<String, AdminChatSession> deduped = <String, AdminChatSession>{};
+    for (final AdminChatSession chat in chats) {
+      final String key = _conversationKey(chat);
+      final AdminChatSession? existing = deduped[key];
+      if (existing == null || _shouldReplaceChatSession(chat, existing)) {
+        deduped[key] = chat;
+      }
+    }
+    final List<AdminChatSession> uniqueChats = deduped.values.toList();
+    uniqueChats.sort(
+      (AdminChatSession a, AdminChatSession b) =>
+          b.lastMessageTime.compareTo(a.lastMessageTime),
+    );
+    return uniqueChats;
+  }
+
   Future<List<AdminChatSession>> _fetchAdminChats() async {
     final Response<dynamic> response = await _client.get(
       ApiConfig.adminSupportAdminSessions,
@@ -702,18 +762,20 @@ class AdminChatService {
       _cacheChatSessionFromMap(row);
       return AdminChatSession.fromJson(row);
     }).toList();
+    final List<AdminChatSession> uniqueChats =
+        _dedupeChatsByConversation(chats);
     _cachedAdminChats
       ..clear()
-      ..addAll(chats);
-    return chats;
+      ..addAll(uniqueChats);
+    return uniqueChats;
   }
 
   Stream<List<AdminMessage>> getMessagesStream(String chatId) {
-    final StreamController<List<AdminMessage>> controller = _messageControllers
-        .putIfAbsent(
-          chatId,
-          () => StreamController<List<AdminMessage>>.broadcast(),
-        );
+    final StreamController<List<AdminMessage>> controller =
+        _messageControllers.putIfAbsent(
+      chatId,
+      () => StreamController<List<AdminMessage>>.broadcast(),
+    );
     if (_messageCache.containsKey(chatId)) {
       scheduleMicrotask(() async {
         if (!controller.isClosed) {
@@ -784,14 +846,8 @@ class AdminChatService {
     try {
       await _ensureSubscribed(chatId);
     } catch (error) {
-      if (_isRtmUnavailableError(error)) {
-        publishViaRtm = false;
-        debugPrint(
-          '[AdminChat] sendMessage fallback (RTM unavailable): $error',
-        );
-      } else {
-        rethrow;
-      }
+      publishViaRtm = false;
+      debugPrint('[AdminChat] sendMessage fallback (subscribe failed): $error');
     }
 
     final AdminMessage message = AdminMessage(
@@ -824,18 +880,49 @@ class AdminChatService {
     }
 
     if (_rtmClient == null) {
-      throw Exception('Real-time chat client is not connected.');
+      publishViaRtm = false;
+      debugPrint(
+        '[AdminChat] sendMessage fallback (RTM client not connected).',
+      );
+    }
+
+    if (!publishViaRtm) {
+      _mergeMessage(chatId, message);
+      try {
+        await _registerMessageActivity(chatId, message);
+      } catch (error) {
+        debugPrint(
+          '[AdminChat] message-activity update failed for $chatId: $error',
+        );
+      }
+      return message;
     }
 
     final String channelName = _channelNameForChatId(chatId);
     for (int attempt = 0; attempt < 2; attempt++) {
-      final (RtmStatus status, _) = await _rtmClient!.publish(
-        channelName,
-        jsonEncode(message.toJson()),
-        channelType: RtmChannelType.message,
-        customType: messageType,
-        storeInHistory: true,
-      );
+      final RtmStatus status;
+      try {
+        final RtmClient? client = _rtmClient;
+        if (client == null) {
+          debugPrint(
+            '[AdminChat][RTM] publish client became null; switching to fallback.',
+          );
+          break;
+        }
+        final (RtmStatus publishStatus, _) = await client.publish(
+          channelName,
+          jsonEncode(message.toJson()),
+          channelType: RtmChannelType.message,
+          customType: messageType,
+          storeInHistory: true,
+        );
+        status = publishStatus;
+      } catch (error) {
+        debugPrint(
+          '[AdminChat][RTM] publish threw exception; switching to fallback: $error',
+        );
+        break;
+      }
       if (!status.error) {
         _mergeMessage(chatId, message);
         try {
@@ -863,9 +950,22 @@ class AdminChatService {
         break;
       }
       if (attempt == 0 && _isRecoverableRtmReason(reason)) {
-        await _resetRtmState();
-        await _ensureSubscribed(chatId);
-        continue;
+        try {
+          await _resetRtmState();
+          await _ensureSubscribed(chatId);
+          if (_rtmClient != null) {
+            continue;
+          }
+          debugPrint(
+            '[AdminChat][RTM] retry subscribe returned null client; using fallback',
+          );
+          break;
+        } catch (error) {
+          debugPrint(
+            '[AdminChat][RTM] retry subscribe failed; using fallback: $error',
+          );
+          break;
+        }
       }
       debugPrint(
         '[AdminChat][RTM] publish failed on $channelName; switching to fallback: $reason',

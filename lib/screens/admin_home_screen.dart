@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/admin_booking_models.dart';
 import '../models/admin_chat_model.dart';
@@ -17,6 +18,7 @@ import '../services/chat_push_service.dart';
 import '../services/puja_call_service.dart';
 import '../services/push_notification_bootstrap_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/cosmic_bottom_nav.dart';
 import 'admin_user_astro_profile_screen.dart';
 import 'puja_video_call_screen.dart';
 import 'support_call_screen.dart';
@@ -67,7 +69,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     ];
 
     return Scaffold(
-      extendBody: true,
+      extendBody: false,
       appBar: AppBar(
         toolbarHeight: 74,
         title: Column(
@@ -92,39 +94,30 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         decoration: AdminAppTheme.pageBackdrop(isDark: dark),
         child: _buildCurrentPage(),
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: NavigationBar(
-            selectedIndex: _currentIndex,
-            onDestinationSelected: (int index) {
-              setState(() => _currentIndex = index);
-            },
-            destinations: <NavigationDestination>[
-              NavigationDestination(
-                icon: const Icon(Icons.chat_bubble_outline_rounded),
-                selectedIcon: const Icon(Icons.chat_bubble_rounded),
-                label: _tr('All Chat', 'सभी चैट'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.temple_buddhist_outlined),
-                selectedIcon: const Icon(Icons.temple_buddhist_rounded),
-                label: _tr('Booked Puja', 'बुक्ड पूजा'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.auto_awesome_outlined),
-                selectedIcon: const Icon(Icons.auto_awesome_rounded),
-                label: _tr('Booked Remedies', 'बुक्ड रेमेडीज'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.settings_outlined),
-                selectedIcon: const Icon(Icons.settings_rounded),
-                label: _tr('Setting', 'सेटिंग'),
-              ),
-            ],
+      bottomNavigationBar: CosmicBottomNav(
+        currentIndex: _currentIndex,
+        onTap: (int index) {
+          if (_currentIndex == index) return;
+          setState(() => _currentIndex = index);
+        },
+        items: <CosmicBottomNavItem>[
+          CosmicBottomNavItem(
+            icon: Icons.chat_bubble_rounded,
+            label: _tr('All Chat', 'सभी चैट'),
           ),
-        ),
+          CosmicBottomNavItem(
+            icon: Icons.temple_buddhist_rounded,
+            label: _tr('Booked Puja', 'बुक्ड पूजा'),
+          ),
+          CosmicBottomNavItem(
+            icon: Icons.auto_awesome_rounded,
+            label: _tr('Booked Remedies', 'बुक्ड रेमेडीज'),
+          ),
+          CosmicBottomNavItem(
+            icon: Icons.settings_rounded,
+            label: _tr('Setting', 'सेटिंग'),
+          ),
+        ],
       ),
     );
   }
@@ -165,203 +158,202 @@ class _AllChatsTabState extends State<_AllChatsTab> {
     return StreamBuilder<List<AdminChatSession>>(
       key: ValueKey<int>(_refreshSeed),
       stream: _chatService.getAllChatsForAdmin(),
-      builder:
-          (
-            BuildContext context,
-            AsyncSnapshot<List<AdminChatSession>> snapshot,
-          ) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return RefreshIndicator(
-                onRefresh: _reload,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: const <Widget>[
-                    SizedBox(height: 240),
-                    Center(child: CircularProgressIndicator()),
-                  ],
+      builder: (
+        BuildContext context,
+        AsyncSnapshot<List<AdminChatSession>> snapshot,
+      ) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const <Widget>[
+                SizedBox(height: 240),
+                Center(child: CircularProgressIndicator()),
+              ],
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: <Widget>[
+                _StateMessage(
+                  icon: Icons.error_outline_rounded,
+                  title: 'Unable to load chats',
+                  subtitle:
+                      'Please check server/network connection and try again.',
                 ),
-              );
-            }
-            if (snapshot.hasError) {
-              return RefreshIndicator(
-                onRefresh: _reload,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: <Widget>[
-                    _StateMessage(
-                      icon: Icons.error_outline_rounded,
-                      title: 'Unable to load chats',
-                      subtitle:
-                          'Please check server/network connection and try again.',
+              ],
+            ),
+          );
+        }
+        final List<AdminChatSession> chats =
+            snapshot.data ?? <AdminChatSession>[];
+        if (chats.isEmpty) {
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const <Widget>[
+                _StateMessage(
+                  icon: Icons.mark_chat_unread_outlined,
+                  title: 'No chats yet',
+                  subtitle:
+                      'User conversations will appear here automatically.',
+                ),
+              ],
+            ),
+          );
+        }
+        return RefreshIndicator(
+          onRefresh: _reload,
+          child: ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+            itemCount: chats.length,
+            separatorBuilder: (BuildContext context, int index) =>
+                const SizedBox(height: 12),
+            itemBuilder: (BuildContext context, int index) {
+              final AdminChatSession chat = chats[index];
+              return InkWell(
+                borderRadius: BorderRadius.circular(24),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => _AdminChatDetailScreen(chat: chat),
                     ),
-                  ],
-                ),
-              );
-            }
-            final List<AdminChatSession> chats =
-                snapshot.data ?? <AdminChatSession>[];
-            if (chats.isEmpty) {
-              return RefreshIndicator(
-                onRefresh: _reload,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: const <Widget>[
-                    _StateMessage(
-                      icon: Icons.mark_chat_unread_outlined,
-                      title: 'No chats yet',
-                      subtitle:
-                          'User conversations will appear here automatically.',
-                    ),
-                  ],
-                ),
-              );
-            }
-            return RefreshIndicator(
-              onRefresh: _reload,
-              child: ListView.separated(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
-                itemCount: chats.length,
-                separatorBuilder: (BuildContext context, int index) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (BuildContext context, int index) {
-                  final AdminChatSession chat = chats[index];
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(24),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => _AdminChatDetailScreen(chat: chat),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: AdminAppTheme.glassCard(),
-                      child: Row(
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: AdminAppTheme.glassCard(),
+                  child: Row(
+                    children: <Widget>[
+                      Stack(
                         children: <Widget>[
-                          Stack(
-                            children: <Widget>[
-                              CircleAvatar(
-                                radius: 28,
-                                backgroundColor: AdminAppTheme.royal.withValues(
-                                  alpha: 0.12,
-                                ),
-                                backgroundImage:
-                                    (chat.userAvatar ?? '').trim().isNotEmpty
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: AdminAppTheme.royal.withValues(
+                              alpha: 0.12,
+                            ),
+                            backgroundImage:
+                                (chat.userAvatar ?? '').trim().isNotEmpty
                                     ? NetworkImage(chat.userAvatar!)
                                     : null,
-                                child: (chat.userAvatar ?? '').trim().isEmpty
-                                    ? Text(
-                                        chat.userName.isEmpty
-                                            ? 'U'
-                                            : chat.userName[0].toUpperCase(),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          color: AdminAppTheme.royal,
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                              if (chat.isUserOnline)
-                                Positioned(
-                                  right: 2,
-                                  bottom: 2,
-                                  child: Container(
-                                    width: 12,
-                                    height: 12,
-                                    decoration: BoxDecoration(
-                                      color: AdminAppTheme.success,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 2,
-                                      ),
+                            child: (chat.userAvatar ?? '').trim().isEmpty
+                                ? Text(
+                                    chat.userName.isEmpty
+                                        ? 'U'
+                                        : chat.userName[0].toUpperCase(),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: AdminAppTheme.royal,
                                     ),
-                                  ),
-                                ),
-                            ],
+                                  )
+                                : null,
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Row(
-                                  children: <Widget>[
-                                    Expanded(
-                                      child: Text(
-                                        chat.userName,
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      _formatDateTime(chat.lastMessageTime),
-                                      style: const TextStyle(
-                                        fontSize: 11.5,
-                                        color: AdminAppTheme.muted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  chat.userPhone?.trim().isNotEmpty == true
-                                      ? chat.userPhone!
-                                      : 'User ID: ${chat.userId}',
-                                  style: const TextStyle(
-                                    fontSize: 12.5,
-                                    color: AdminAppTheme.muted,
-                                    fontWeight: FontWeight.w600,
+                          if (chat.isUserOnline)
+                            Positioned(
+                              right: 2,
+                              bottom: 2,
+                              child: Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: AdminAppTheme.success,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
                                   ),
                                 ),
-                                const SizedBox(height: 8),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Row(
+                              children: <Widget>[
+                                Expanded(
+                                  child: Text(
+                                    chat.userName,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
                                 Text(
-                                  chat.lastMessage.isEmpty
-                                      ? 'Tap to open conversation'
-                                      : chat.lastMessage,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                                  _formatDateTime(chat.lastMessageTime),
                                   style: const TextStyle(
-                                    fontSize: 13.5,
-                                    height: 1.35,
-                                    color: AdminAppTheme.ink,
+                                    fontSize: 11.5,
+                                    color: AdminAppTheme.muted,
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                          if (chat.unreadCount > 0) ...<Widget>[
-                            const SizedBox(width: 10),
-                            Container(
-                              width: 28,
-                              height: 28,
-                              alignment: Alignment.center,
-                              decoration: const BoxDecoration(
-                                color: AdminAppTheme.gold,
-                                shape: BoxShape.circle,
+                            const SizedBox(height: 6),
+                            Text(
+                              chat.userPhone?.trim().isNotEmpty == true
+                                  ? chat.userPhone!
+                                  : 'User ID: ${chat.userId}',
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: AdminAppTheme.muted,
+                                fontWeight: FontWeight.w600,
                               ),
-                              child: Text(
-                                '${chat.unreadCount}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
-                                ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              chat.lastMessage.isEmpty
+                                  ? 'Tap to open conversation'
+                                  : chat.lastMessage,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                height: 1.35,
+                                color: AdminAppTheme.ink,
                               ),
                             ),
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            );
-          },
+                      if (chat.unreadCount > 0) ...<Widget>[
+                        const SizedBox(width: 10),
+                        Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: const BoxDecoration(
+                            color: AdminAppTheme.gold,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '${chat.unreadCount}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
@@ -425,9 +417,9 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
   String _tr(String en, String hi) => _isHindi ? hi : en;
 
   String get _chatInfoText => _tr(
-    'Admin support chat. You can send text messages and start audio/video calls.',
-    'एडमिन सपोर्ट चैट। आप टेक्स्ट संदेश भेज सकते हैं और ऑडियो/वीडियो कॉल शुरू कर सकते हैं।',
-  );
+        'Admin support chat. You can send text messages and start audio/video calls.',
+        'एडमिन सपोर्ट चैट। आप टेक्स्ट संदेश भेज सकते हैं और ऑडियो/वीडियो कॉल शुरू कर सकते हैं।',
+      );
 
   void _showError(String message) {
     if (!mounted) return;
@@ -436,6 +428,69 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
       ..showSnackBar(
         SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
       );
+  }
+
+  bool _isValidCoordinate(double lat, double lng) {
+    return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  }
+
+  Uri? _extractLocationUri(String text) {
+    final String content = text.trim();
+    if (content.isEmpty) {
+      return null;
+    }
+
+    final RegExp urlRegex = RegExp(r'https?://[^\s]+', caseSensitive: false);
+    final RegExpMatch? urlMatch = urlRegex.firstMatch(content);
+    if (urlMatch != null) {
+      final Uri? candidate = Uri.tryParse(urlMatch.group(0)!);
+      if (candidate != null) {
+        final String host = candidate.host.toLowerCase();
+        final bool isGoogleMapsHost = host == 'maps.google.com' ||
+            host == 'google.com' ||
+            host == 'www.google.com' ||
+            host.endsWith('.google.com') ||
+            host == 'maps.app.goo.gl';
+        final bool looksLikeMapPath =
+            candidate.path.toLowerCase().contains('/maps') ||
+                candidate.path.toLowerCase().contains('/search');
+        if (isGoogleMapsHost &&
+            (looksLikeMapPath || candidate.query.isNotEmpty)) {
+          return candidate;
+        }
+      }
+    }
+
+    final RegExp latLngRegex =
+        RegExp(r'(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)');
+    final RegExpMatch? latLngMatch = latLngRegex.firstMatch(content);
+    if (latLngMatch != null) {
+      final double? lat = double.tryParse(latLngMatch.group(1)!);
+      final double? lng = double.tryParse(latLngMatch.group(2)!);
+      if (lat != null && lng != null && _isValidCoordinate(lat, lng)) {
+        return Uri.parse(
+            'https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+      }
+    }
+    return null;
+  }
+
+  Future<void> _openLocationInMaps(String content) async {
+    final Uri? uri = _extractLocationUri(content);
+    if (uri == null) {
+      _showError(
+          _tr('Location link is not valid.', 'लोकेशन लिंक मान्य नहीं है।'));
+      return;
+    }
+    final bool launched = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched) {
+      _showError(
+        _tr('Unable to open Google Maps.', 'Google Maps खोलने में समस्या हुई।'),
+      );
+    }
   }
 
   Future<void> _notifyUser({
@@ -450,8 +505,7 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
       messageType: messageType,
       content: content,
       notificationType: 'SESSION',
-      actionData:
-          actionData ??
+      actionData: actionData ??
           <String, dynamic>{
             'source': 'chat',
             'chatId': widget.chat.chatId,
@@ -667,9 +721,8 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
         ),
         actions: <Widget>[
           IconButton(
-            onPressed: _startingAudioCall
-                ? null
-                : () => _startSupportCall('audio'),
+            onPressed:
+                _startingAudioCall ? null : () => _startSupportCall('audio'),
             tooltip: _tr('Audio call', 'ऑडियो कॉल'),
             icon: _startingAudioCall
                 ? const SizedBox(
@@ -680,9 +733,8 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
                 : const Icon(Icons.call_rounded),
           ),
           IconButton(
-            onPressed: _startingVideoCall
-                ? null
-                : () => _startSupportCall('video'),
+            onPressed:
+                _startingVideoCall ? null : () => _startSupportCall('video'),
             tooltip: _tr('Video call', 'वीडियो कॉल'),
             icon: _startingVideoCall
                 ? const SizedBox(
@@ -729,66 +781,65 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
             Expanded(
               child: StreamBuilder<List<AdminMessage>>(
                 stream: _chatService.getMessagesStream(widget.chat.chatId),
-                builder:
-                    (
-                      BuildContext context,
-                      AsyncSnapshot<List<AdminMessage>> snapshot,
-                    ) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        return _StateMessage(
-                          icon: Icons.error_outline_rounded,
-                          title: _tr(
-                            'Unable to load messages',
-                            'मैसेज लोड नहीं हुए',
-                          ),
-                          subtitle: _tr(
-                            'Please try again. If it persists, check chat configuration.',
-                            'कृपया दोबारा प्रयास करें। समस्या जारी रहे तो चैट कॉन्फ़िगरेशन जांचें।',
-                          ),
-                        );
-                      }
-                      final List<AdminMessage> messages =
-                          snapshot.data ?? <AdminMessage>[];
-                      if (messages.isEmpty) {
-                        return _StateMessage(
-                          icon: Icons.chat_bubble_outline_rounded,
-                          title: _tr(
-                            'No messages yet',
-                            'अभी तक कोई संदेश नहीं है',
-                          ),
-                          subtitle: _tr(
-                            'Send a message to start the conversation.',
-                            'बातचीत शुरू करने के लिए संदेश भेजें।',
-                          ),
-                        );
-                      }
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (_scrollController.hasClients) {
-                          _scrollController.animateTo(
-                            _scrollController.position.maxScrollExtent,
-                            duration: const Duration(milliseconds: 220),
-                            curve: Curves.easeOut,
-                          );
-                        }
-                      });
-                      return ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-                        itemCount: messages.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          final AdminMessage message = messages[index];
-                          final bool isAdmin = message.senderRole == 'admin';
-                          return _buildMessageBubble(
-                            message: message,
-                            isAdmin: isAdmin,
-                            isDark: isDark,
-                          );
-                        },
+                builder: (
+                  BuildContext context,
+                  AsyncSnapshot<List<AdminMessage>> snapshot,
+                ) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return _StateMessage(
+                      icon: Icons.error_outline_rounded,
+                      title: _tr(
+                        'Unable to load messages',
+                        'मैसेज लोड नहीं हुए',
+                      ),
+                      subtitle: _tr(
+                        'Please try again. If it persists, check chat configuration.',
+                        'कृपया दोबारा प्रयास करें। समस्या जारी रहे तो चैट कॉन्फ़िगरेशन जांचें।',
+                      ),
+                    );
+                  }
+                  final List<AdminMessage> messages =
+                      snapshot.data ?? <AdminMessage>[];
+                  if (messages.isEmpty) {
+                    return _StateMessage(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      title: _tr(
+                        'No messages yet',
+                        'अभी तक कोई संदेश नहीं है',
+                      ),
+                      subtitle: _tr(
+                        'Send a message to start the conversation.',
+                        'बातचीत शुरू करने के लिए संदेश भेजें।',
+                      ),
+                    );
+                  }
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_scrollController.hasClients) {
+                      _scrollController.animateTo(
+                        _scrollController.position.maxScrollExtent,
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                  });
+                  return ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                    itemCount: messages.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      final AdminMessage message = messages[index];
+                      final bool isAdmin = message.senderRole == 'admin';
+                      return _buildMessageBubble(
+                        message: message,
+                        isAdmin: isAdmin,
+                        isDark: isDark,
                       );
                     },
+                  );
+                },
               ),
             ),
             _buildInputBar(isDark: isDark),
@@ -855,6 +906,9 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
         ? (isDark ? const Color(0xFF2A2E3B) : AdminAppTheme.cream)
         : (isDark ? const Color(0xFF1B1F2B) : Colors.white);
     final Color nameColor = isAdmin ? AdminAppTheme.gold : AdminAppTheme.royal;
+    final Uri? locationUri = message.messageType == 'text'
+        ? _extractLocationUri(message.content)
+        : null;
 
     return Align(
       alignment: isAdmin ? Alignment.centerRight : Alignment.centerLeft,
@@ -885,14 +939,57 @@ class _AdminChatDetailScreenState extends State<_AdminChatDetailScreen> {
               ),
             ),
             const SizedBox(height: 6),
-            Text(
-              message.content,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.35,
-                color: isDark ? Colors.white : AdminAppTheme.ink,
+            if (locationUri != null)
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => _openLocationInMaps(message.content),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(
+                          Icons.location_on_rounded,
+                          size: 16,
+                          color:
+                              isDark ? AdminAppTheme.gold : AdminAppTheme.royal,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _tr('Open in Google Maps', 'Google Maps में खोलें'),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: isDark
+                                ? AdminAppTheme.gold
+                                : AdminAppTheme.royal,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      message.content,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.35,
+                        color: isDark ? Colors.white : AdminAppTheme.ink,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Text(
+                message.content,
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.35,
+                  color: isDark ? Colors.white : AdminAppTheme.ink,
+                ),
               ),
-            ),
             const SizedBox(height: 6),
             Text(
               DateFormat('HH:mm').format(message.timestamp),
@@ -1046,110 +1143,221 @@ class _BookedPujaTab extends StatefulWidget {
 
 class _BookedPujaTabState extends State<_BookedPujaTab> {
   final AdminBookingService _bookingService = AdminBookingService();
-  late Future<List<AdminPujaBooking>> _future;
+  final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
   _BookingTimelineFilter _selectedFilter = _BookingTimelineFilter.upcoming;
+  List<AdminPujaBooking> _items = <AdminPujaBooking>[];
+  bool _isInitialLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasNext = true;
+  int _nextPage = 0;
+  String _error = '';
+  static const int _pageSize = 12;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
-    _future = _bookingService.fetchPujaBookings();
+    _scrollController.addListener(_onScroll);
+    _loadBookings(reset: true);
   }
 
-  Future<void> _reload() async {
-    setState(() => _future = _bookingService.fetchPujaBookings());
-    await _future;
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 220) {
+      _loadBookings();
+    }
+  }
+
+  Future<void> _loadBookings({bool reset = false}) async {
+    if (reset) {
+      setState(() {
+        _isInitialLoading = true;
+        _isLoadingMore = false;
+        _hasNext = true;
+        _nextPage = 0;
+        _error = '';
+      });
+    } else if (_isInitialLoading || _isLoadingMore || !_hasNext) {
+      return;
+    } else {
+      setState(() => _isLoadingMore = true);
+    }
+
+    final int pageToLoad = reset ? 0 : _nextPage;
+    try {
+      final AdminPagedResult<AdminPujaBooking> page =
+          await _bookingService.fetchPujaBookingsPage(
+        page: pageToLoad,
+        size: _pageSize,
+        search: _searchController.text,
+      );
+      if (!mounted) return;
+      setState(() {
+        _items =
+            reset ? page.items : <AdminPujaBooking>[..._items, ...page.items];
+        _nextPage = page.page + 1;
+        _hasNext = page.hasNext;
+        _isInitialLoading = false;
+        _isLoadingMore = false;
+        _error = '';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        if (reset || _items.isEmpty) {
+          _error = error.toString();
+          _isInitialLoading = false;
+        }
+        _isLoadingMore = false;
+      });
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 420), () {
+      if (!mounted) return;
+      _loadBookings(reset: true);
+    });
+  }
+
+  Future<void> _reload() => _loadBookings(reset: true);
+
+  List<AdminPujaBooking> _filteredItems() {
+    final List<AdminPujaBooking> upcomingItems = _items
+        .where((AdminPujaBooking item) => !_isPujaCompleted(item))
+        .toList();
+    final List<AdminPujaBooking> completedItems =
+        _items.where(_isPujaCompleted).toList();
+    return _selectedFilter == _BookingTimelineFilter.upcoming
+        ? upcomingItems
+        : completedItems;
+  }
+
+  Widget _buildSearchField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search puja bookings',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: _searchController.text.trim().isEmpty
+              ? null
+              : IconButton(
+                  onPressed: () {
+                    _searchController.clear();
+                    _loadBookings(reset: true);
+                    setState(() {});
+                  },
+                  icon: const Icon(Icons.close_rounded),
+                ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<AdminPujaBooking>>(
-      future: _future,
-      builder:
-          (
-            BuildContext context,
-            AsyncSnapshot<List<AdminPujaBooking>> snapshot,
-          ) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return _StateMessage(
-                icon: Icons.temple_buddhist_outlined,
-                title: 'Unable to load booked puja',
-                subtitle: 'Please check the admin booking API and try again.',
-                onRetry: _reload,
-              );
-            }
-            final List<AdminPujaBooking> items =
-                snapshot.data ?? <AdminPujaBooking>[];
-            if (items.isEmpty) {
-              return const _StateMessage(
-                icon: Icons.event_busy_outlined,
-                title: 'No puja bookings',
-                subtitle: 'Booked puja records will appear here.',
-              );
-            }
-            final List<AdminPujaBooking> upcomingItems = items
-                .where((AdminPujaBooking item) => !_isPujaCompleted(item))
-                .toList();
-            final List<AdminPujaBooking> completedItems = items
-                .where(_isPujaCompleted)
-                .toList();
-            final bool showUpcoming =
-                _selectedFilter == _BookingTimelineFilter.upcoming;
-            final List<AdminPujaBooking> filteredItems = showUpcoming
-                ? upcomingItems
-                : completedItems;
-            return RefreshIndicator(
-              onRefresh: _reload,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
-                children: <Widget>[
-                  _BookingFilterHeader(
-                    title: 'Puja Timeline',
-                    subtitle:
-                        'Review scheduled ceremonies and completed rituals.',
-                    primaryLabel: 'Upcoming',
-                    primaryCount: upcomingItems.length,
-                    secondaryLabel: 'Complete',
-                    secondaryCount: completedItems.length,
-                    isPrimarySelected: showUpcoming,
-                    onPrimaryTap: () {
-                      setState(
-                        () => _selectedFilter = _BookingTimelineFilter.upcoming,
-                      );
-                    },
-                    onSecondaryTap: () {
-                      setState(
-                        () => _selectedFilter = _BookingTimelineFilter.complete,
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  if (filteredItems.isEmpty)
-                    _FilteredEmptyState(
-                      icon: showUpcoming
-                          ? Icons.upcoming_outlined
-                          : Icons.verified_rounded,
-                      title: showUpcoming
-                          ? 'No upcoming puja'
-                          : 'No completed puja',
-                      subtitle: showUpcoming
-                          ? 'Freshly scheduled puja bookings will appear here.'
-                          : 'Completed puja records will appear here.',
-                    )
-                  else
-                    ...filteredItems.map(
-                      (AdminPujaBooking item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _PujaBookingCard(item: item),
-                      ),
-                    ),
-                ],
+    if (_isInitialLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error.isNotEmpty && _items.isEmpty) {
+      return _StateMessage(
+        icon: Icons.temple_buddhist_outlined,
+        title: 'Unable to load booked puja',
+        subtitle: 'Please check the admin booking API and try again.',
+        onRetry: _reload,
+      );
+    }
+
+    final List<AdminPujaBooking> upcomingItems = _items
+        .where((AdminPujaBooking item) => !_isPujaCompleted(item))
+        .toList();
+    final List<AdminPujaBooking> completedItems =
+        _items.where(_isPujaCompleted).toList();
+    final bool showUpcoming =
+        _selectedFilter == _BookingTimelineFilter.upcoming;
+    final List<AdminPujaBooking> filteredItems = _filteredItems();
+    final bool noData = filteredItems.isEmpty && !_isLoadingMore;
+
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: ListView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+        children: <Widget>[
+          _buildSearchField(),
+          _BookingFilterHeader(
+            title: 'Puja Timeline',
+            subtitle: 'Review scheduled ceremonies and completed rituals.',
+            primaryLabel: 'Upcoming',
+            primaryCount: upcomingItems.length,
+            secondaryLabel: 'Complete',
+            secondaryCount: completedItems.length,
+            isPrimarySelected: showUpcoming,
+            onPrimaryTap: () {
+              setState(() => _selectedFilter = _BookingTimelineFilter.upcoming);
+            },
+            onSecondaryTap: () {
+              setState(() => _selectedFilter = _BookingTimelineFilter.complete);
+            },
+          ),
+          const SizedBox(height: 16),
+          if (noData)
+            _FilteredEmptyState(
+              icon: showUpcoming
+                  ? Icons.upcoming_outlined
+                  : Icons.verified_rounded,
+              title: showUpcoming ? 'No upcoming puja' : 'No completed puja',
+              subtitle: showUpcoming
+                  ? 'Freshly scheduled puja bookings will appear here.'
+                  : 'Completed puja records will appear here.',
+            )
+          else
+            ...filteredItems.map(
+              (AdminPujaBooking item) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _PujaBookingCard(item: item),
               ),
-            );
-          },
+            ),
+          if (noData && _hasNext)
+            Center(
+              child: TextButton.icon(
+                onPressed: _isLoadingMore ? null : _loadBookings,
+                icon: const Icon(Icons.expand_more_rounded),
+                label: const Text('Load more'),
+              ),
+            ),
+          if (_isLoadingMore)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.2),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -1163,110 +1371,223 @@ class _BookedRemediesTab extends StatefulWidget {
 
 class _BookedRemediesTabState extends State<_BookedRemediesTab> {
   final AdminBookingService _bookingService = AdminBookingService();
-  late Future<List<AdminRemedyBooking>> _future;
+  final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
   _BookingTimelineFilter _selectedFilter = _BookingTimelineFilter.upcoming;
+  List<AdminRemedyBooking> _items = <AdminRemedyBooking>[];
+  bool _isInitialLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasNext = true;
+  int _nextPage = 0;
+  String _error = '';
+  static const int _pageSize = 12;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
-    _future = _bookingService.fetchRemedyBookings();
+    _scrollController.addListener(_onScroll);
+    _loadBookings(reset: true);
   }
 
-  Future<void> _reload() async {
-    setState(() => _future = _bookingService.fetchRemedyBookings());
-    await _future;
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 220) {
+      _loadBookings();
+    }
+  }
+
+  Future<void> _loadBookings({bool reset = false}) async {
+    if (reset) {
+      setState(() {
+        _isInitialLoading = true;
+        _isLoadingMore = false;
+        _hasNext = true;
+        _nextPage = 0;
+        _error = '';
+      });
+    } else if (_isInitialLoading || _isLoadingMore || !_hasNext) {
+      return;
+    } else {
+      setState(() => _isLoadingMore = true);
+    }
+
+    final int pageToLoad = reset ? 0 : _nextPage;
+    try {
+      final AdminPagedResult<AdminRemedyBooking> page =
+          await _bookingService.fetchRemedyBookingsPage(
+        page: pageToLoad,
+        size: _pageSize,
+        search: _searchController.text,
+      );
+      if (!mounted) return;
+      setState(() {
+        _items =
+            reset ? page.items : <AdminRemedyBooking>[..._items, ...page.items];
+        _nextPage = page.page + 1;
+        _hasNext = page.hasNext;
+        _isInitialLoading = false;
+        _isLoadingMore = false;
+        _error = '';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        if (reset || _items.isEmpty) {
+          _error = error.toString();
+          _isInitialLoading = false;
+        }
+        _isLoadingMore = false;
+      });
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 420), () {
+      if (!mounted) return;
+      _loadBookings(reset: true);
+    });
+  }
+
+  Future<void> _reload() => _loadBookings(reset: true);
+
+  List<AdminRemedyBooking> _filteredItems() {
+    final List<AdminRemedyBooking> upcomingItems = _items
+        .where((AdminRemedyBooking item) => !_isRemedyCompleted(item))
+        .toList();
+    final List<AdminRemedyBooking> completedItems =
+        _items.where(_isRemedyCompleted).toList();
+    return _selectedFilter == _BookingTimelineFilter.upcoming
+        ? upcomingItems
+        : completedItems;
+  }
+
+  Widget _buildSearchField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search remedy orders',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: _searchController.text.trim().isEmpty
+              ? null
+              : IconButton(
+                  onPressed: () {
+                    _searchController.clear();
+                    _loadBookings(reset: true);
+                    setState(() {});
+                  },
+                  icon: const Icon(Icons.close_rounded),
+                ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<AdminRemedyBooking>>(
-      future: _future,
-      builder:
-          (
-            BuildContext context,
-            AsyncSnapshot<List<AdminRemedyBooking>> snapshot,
-          ) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return _StateMessage(
-                icon: Icons.auto_awesome_outlined,
-                title: 'Unable to load remedy bookings',
-                subtitle: 'Please check the admin remedies API and try again.',
-                onRetry: _reload,
-              );
-            }
-            final List<AdminRemedyBooking> items =
-                snapshot.data ?? <AdminRemedyBooking>[];
-            if (items.isEmpty) {
-              return const _StateMessage(
-                icon: Icons.inventory_2_outlined,
-                title: 'No remedy bookings',
-                subtitle: 'Paid remedy orders will appear here.',
-              );
-            }
-            final List<AdminRemedyBooking> upcomingItems = items
-                .where((AdminRemedyBooking item) => !_isRemedyCompleted(item))
-                .toList();
-            final List<AdminRemedyBooking> completedItems = items
-                .where(_isRemedyCompleted)
-                .toList();
-            final bool showUpcoming =
-                _selectedFilter == _BookingTimelineFilter.upcoming;
-            final List<AdminRemedyBooking> filteredItems = showUpcoming
-                ? upcomingItems
-                : completedItems;
-            return RefreshIndicator(
-              onRefresh: _reload,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
-                children: <Widget>[
-                  _BookingFilterHeader(
-                    title: 'Remedy Orders',
-                    subtitle:
-                        'Separate active deliveries from completed orders.',
-                    primaryLabel: 'Upcoming',
-                    primaryCount: upcomingItems.length,
-                    secondaryLabel: 'Complete',
-                    secondaryCount: completedItems.length,
-                    isPrimarySelected: showUpcoming,
-                    onPrimaryTap: () {
-                      setState(
-                        () => _selectedFilter = _BookingTimelineFilter.upcoming,
-                      );
-                    },
-                    onSecondaryTap: () {
-                      setState(
-                        () => _selectedFilter = _BookingTimelineFilter.complete,
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  if (filteredItems.isEmpty)
-                    _FilteredEmptyState(
-                      icon: showUpcoming
-                          ? Icons.local_shipping_outlined
-                          : Icons.check_circle_outline_rounded,
-                      title: showUpcoming
-                          ? 'No upcoming remedy orders'
-                          : 'No completed remedy orders',
-                      subtitle: showUpcoming
-                          ? 'Orders in progress will appear here.'
-                          : 'Delivered or completed remedy orders will appear here.',
-                    )
-                  else
-                    ...filteredItems.map(
-                      (AdminRemedyBooking item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _RemedyBookingCard(item: item),
-                      ),
-                    ),
-                ],
+    if (_isInitialLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error.isNotEmpty && _items.isEmpty) {
+      return _StateMessage(
+        icon: Icons.auto_awesome_outlined,
+        title: 'Unable to load remedy bookings',
+        subtitle: 'Please check the admin remedies API and try again.',
+        onRetry: _reload,
+      );
+    }
+
+    final List<AdminRemedyBooking> upcomingItems = _items
+        .where((AdminRemedyBooking item) => !_isRemedyCompleted(item))
+        .toList();
+    final List<AdminRemedyBooking> completedItems =
+        _items.where(_isRemedyCompleted).toList();
+    final bool showUpcoming =
+        _selectedFilter == _BookingTimelineFilter.upcoming;
+    final List<AdminRemedyBooking> filteredItems = _filteredItems();
+    final bool noData = filteredItems.isEmpty && !_isLoadingMore;
+
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: ListView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+        children: <Widget>[
+          _buildSearchField(),
+          _BookingFilterHeader(
+            title: 'Remedy Orders',
+            subtitle: 'Separate active deliveries from completed orders.',
+            primaryLabel: 'Upcoming',
+            primaryCount: upcomingItems.length,
+            secondaryLabel: 'Complete',
+            secondaryCount: completedItems.length,
+            isPrimarySelected: showUpcoming,
+            onPrimaryTap: () {
+              setState(() => _selectedFilter = _BookingTimelineFilter.upcoming);
+            },
+            onSecondaryTap: () {
+              setState(() => _selectedFilter = _BookingTimelineFilter.complete);
+            },
+          ),
+          const SizedBox(height: 16),
+          if (noData)
+            _FilteredEmptyState(
+              icon: showUpcoming
+                  ? Icons.local_shipping_outlined
+                  : Icons.check_circle_outline_rounded,
+              title: showUpcoming
+                  ? 'No upcoming remedy orders'
+                  : 'No completed remedy orders',
+              subtitle: showUpcoming
+                  ? 'Orders in progress will appear here.'
+                  : 'Delivered or completed remedy orders will appear here.',
+            )
+          else
+            ...filteredItems.map(
+              (AdminRemedyBooking item) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _RemedyBookingCard(item: item),
               ),
-            );
-          },
+            ),
+          if (noData && _hasNext)
+            Center(
+              child: TextButton.icon(
+                onPressed: _isLoadingMore ? null : _loadBookings,
+                icon: const Icon(Icons.expand_more_rounded),
+                label: const Text('Load more'),
+              ),
+            ),
+          if (_isLoadingMore)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.2),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -1466,7 +1787,8 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
     final bool dark = Theme.of(context).brightness == Brightness.dark;
     return FutureBuilder<Map<String, String>>(
       future: _profileFuture,
-      builder: (BuildContext context, AsyncSnapshot<Map<String, String>> snapshot) {
+      builder:
+          (BuildContext context, AsyncSnapshot<Map<String, String>> snapshot) {
         final Map<String, String> profile = snapshot.data ?? <String, String>{};
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
@@ -1641,8 +1963,13 @@ class _PujaBookingCard extends StatelessWidget {
   final AdminPujaBooking item;
 
   bool _isJoinAllowed(DateTime slotTime) {
+    final now = DateTime.now();
     final joinOpensAt = slotTime.subtract(const Duration(minutes: 10));
-    return DateTime.now().isAfter(joinOpensAt);
+    return now.isAfter(joinOpensAt) && !now.isAfter(slotTime);
+  }
+
+  bool _isSlotExpired(DateTime slotTime) {
+    return DateTime.now().isAfter(slotTime);
   }
 
   Future<void> _join(BuildContext context) async {
@@ -1651,6 +1978,13 @@ class _PujaBookingCard extends StatelessWidget {
     if (slotTime == null) {
       scaffold.showSnackBar(
         const SnackBar(content: Text('Slot time is not assigned yet.')),
+      );
+      return;
+    }
+    if (_isSlotExpired(slotTime)) {
+      scaffold.showSnackBar(
+        const SnackBar(
+            content: Text('Puja slot time is passed. Join disabled.')),
       );
       return;
     }
@@ -1693,12 +2027,20 @@ class _PujaBookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String fallbackStatus = _isPujaCompleted(item)
-        ? 'COMPLETED'
-        : 'UPCOMING';
+    final String fallbackStatus =
+        _isPujaCompleted(item) ? 'COMPLETED' : 'UPCOMING';
     final DateTime? slotTime = item.slotTime;
-    final bool joinEnabled =
-        !_isPujaCompleted(item) && slotTime != null && _isJoinAllowed(slotTime);
+    final bool slotExpired = slotTime != null && _isSlotExpired(slotTime);
+    final String startedAtText = item.startedAt == null
+        ? 'Start pending'
+        : DateFormat('dd MMM, hh:mm a').format(item.startedAt!);
+    final String endedAtText = item.completedAt == null
+        ? 'End pending'
+        : DateFormat('dd MMM, hh:mm a').format(item.completedAt!);
+    final bool joinEnabled = !_isPujaCompleted(item) &&
+        slotTime != null &&
+        !slotExpired &&
+        _isJoinAllowed(slotTime);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: AdminAppTheme.glassCard(),
@@ -1736,6 +2078,10 @@ class _PujaBookingCard extends StatelessWidget {
             runSpacing: 10,
             children: <Widget>[
               _InfoPill(
+                icon: Icons.confirmation_number_rounded,
+                label: item.pujaNumber,
+              ),
+              _InfoPill(
                 icon: Icons.currency_rupee_rounded,
                 label: '₹${item.totalPrice.toStringAsFixed(0)}',
               ),
@@ -1745,6 +2091,8 @@ class _PujaBookingCard extends StatelessWidget {
                     ? 'Slot pending'
                     : DateFormat('dd MMM, hh:mm a').format(item.slotTime!),
               ),
+              _InfoPill(icon: Icons.play_circle_rounded, label: startedAtText),
+              _InfoPill(icon: Icons.stop_circle_rounded, label: endedAtText),
               _InfoPill(
                 icon: Icons.credit_card_rounded,
                 label: item.paymentMethod.isEmpty
@@ -1775,13 +2123,23 @@ class _PujaBookingCard extends StatelessWidget {
           ],
           if (!_isPujaCompleted(item)) ...<Widget>[
             const SizedBox(height: 14),
+            if (slotExpired) ...<Widget>[
+              Text(
+                'Slot date/time passed • Join disabled',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AdminAppTheme.danger,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: joinEnabled
-                      ? AdminAppTheme.gold
-                      : Colors.grey.shade300,
+                  backgroundColor:
+                      joinEnabled ? AdminAppTheme.gold : Colors.grey.shade300,
                   foregroundColor: AdminAppTheme.ink,
                 ),
                 onPressed: joinEnabled ? () => _join(context) : null,
@@ -1803,9 +2161,8 @@ class _RemedyBookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String fallbackStatus = _isRemedyCompleted(item)
-        ? 'COMPLETED'
-        : 'UPCOMING';
+    final String fallbackStatus =
+        _isRemedyCompleted(item) ? 'COMPLETED' : 'UPCOMING';
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: AdminAppTheme.glassCard(),
